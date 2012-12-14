@@ -209,20 +209,7 @@ public class UriImage extends MediaItem {
 
     @Override
     public int getSupportedOperations() {
-        int supported = SUPPORT_EDIT | SUPPORT_SETAS;
-        if (isSharable()) supported |= SUPPORT_SHARE;
-        if (BitmapUtils.isSupportedByRegionDecoder(mContentType)) {
-            supported |= SUPPORT_FULL_IMAGE;
-        }
-        return supported;
-    }
-
-    private boolean isSharable() {
-        // We cannot grant read permission to the receiver since we put
-        // the data URI in EXTRA_STREAM instead of the data part of an intent
-        // And there are issues in MediaUploader and Bluetooth file sender to
-        // share a general image data. So, we only share for local file.
-        return ContentResolver.SCHEME_FILE.equals(mUri.getScheme());
+        return SUPPORT_FULL_IMAGE;
     }
 
     @Override
@@ -235,23 +222,23 @@ public class UriImage extends MediaItem {
         return mUri;
     }
 
-    @Override
-    public MediaDetails getDetails() {
-        MediaDetails details = super.getDetails();
-        if (mWidth != 0 && mHeight != 0) {
-            details.addDetail(MediaDetails.INDEX_WIDTH, mWidth);
-            details.addDetail(MediaDetails.INDEX_HEIGHT, mHeight);
-        }
-        if (mContentType != null) {
-            details.addDetail(MediaDetails.INDEX_MIMETYPE, mContentType);
-        }
-        if (ContentResolver.SCHEME_FILE.equals(mUri.getScheme())) {
-            String filePath = mUri.getPath();
-            details.addDetail(MediaDetails.INDEX_PATH, filePath);
-            MediaDetails.extractExifInfo(details, filePath);
-        }
-        return details;
-    }
+//    @Override
+//    public MediaDetails getDetails() {
+//        MediaDetails details = super.getDetails();
+//        if (mWidth != 0 && mHeight != 0) {
+//            details.addDetail(MediaDetails.INDEX_WIDTH, mWidth);
+//            details.addDetail(MediaDetails.INDEX_HEIGHT, mHeight);
+//        }
+//        if (mContentType != null) {
+//            details.addDetail(MediaDetails.INDEX_MIMETYPE, mContentType);
+//        }
+//        if (ContentResolver.SCHEME_FILE.equals(mUri.getScheme())) {
+//            String filePath = mUri.getPath();
+//            details.addDetail(MediaDetails.INDEX_PATH, filePath);
+//            //MediaDetails.extractExifInfo(details, filePath);
+//        }
+//        return details;
+//    }
 
     @Override
     public String getMimeType() {

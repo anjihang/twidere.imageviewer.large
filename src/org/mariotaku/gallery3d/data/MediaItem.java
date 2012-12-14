@@ -62,23 +62,6 @@ public abstract class MediaItem extends MediaObject {
         super(path, version);
     }
 
-    public long getDateInMs() {
-        return 0;
-    }
-
-    public String getName() {
-        return null;
-    }
-
-    public void getLatLong(double[] latLong) {
-        latLong[0] = INVALID_LATLNG;
-        latLong[1] = INVALID_LATLNG;
-    }
-
-    public String[] getTags() {
-        return null;
-    }
-
     // The rotation of the full-resolution image. By default, it returns the value of
     // getRotation().
     public int getFullImageRotation() {

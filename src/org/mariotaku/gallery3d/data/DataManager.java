@@ -58,24 +58,6 @@ public class DataManager implements StitchingChangeListener {
 
     private static final String TAG = "DataManager";
 
-    // This is the path for the media set seen by the user at top level.
-
-    private static final String TOP_IMAGE_SET_PATH = ApiHelper.HAS_MTP
-            ? "/combo/{/mtp,/local/image,/picasa/image}"
-            : "/combo/{/local/image,/picasa/image}";
-
-    private static final String TOP_LOCAL_IMAGE_SET_PATH = "/local/image";
-
-    public static final Comparator<MediaItem> sDateTakenComparator =
-            new DateTakenComparator();
-
-    private static class DateTakenComparator implements Comparator<MediaItem> {
-        @Override
-        public int compare(MediaItem item1, MediaItem item2) {
-            return -Utils.compare(item1.getDateInMs(), item2.getDateInMs());
-        }
-    }
-
     private final Handler mDefaultMainHandler;
 
     private GalleryApp mApplication;
@@ -103,15 +85,6 @@ public class DataManager implements StitchingChangeListener {
             for (MediaSource source : mSourceMap.values()) {
                 source.resume();
             }
-        }
-    }
-
-    public String getTopSetPath(int typeBits) {
-
-        switch (typeBits) {
-            case INCLUDE_IMAGE: return TOP_IMAGE_SET_PATH;
-            case INCLUDE_LOCAL_IMAGE_ONLY: return TOP_LOCAL_IMAGE_SET_PATH;
-            default: throw new IllegalArgumentException();
         }
     }
 
@@ -162,7 +135,7 @@ public class DataManager implements StitchingChangeListener {
 
     // The following methods forward the request to the proper object.
     public int getSupportedOperations(Path path) {
-        return getMediaObject(path).getSupportedOperations();
+        return MediaObject.SUPPORT_FULL_IMAGE;
     }
 
     public void delete(Path path) {
