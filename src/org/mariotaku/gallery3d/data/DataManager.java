@@ -16,22 +16,16 @@
 
 package org.mariotaku.gallery3d.data;
 
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.WeakHashMap;
+
+import org.mariotaku.gallery3d.app.GalleryApp;
+
 import android.database.ContentObserver;
 import android.net.Uri;
 import android.os.Handler;
-
-import org.mariotaku.gallery3d.app.GalleryApp;
-import org.mariotaku.gallery3d.app.StitchingChangeListener;
-import org.mariotaku.gallery3d.common.ApiHelper;
-import org.mariotaku.gallery3d.common.Utils;
-import org.mariotaku.gallery3d.data.MediaSource.PathId;
-
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
-import java.util.Map.Entry;
-import java.util.WeakHashMap;
+import android.util.Log;
 
 // DataManager manages all media sets and media items in the system.
 //
@@ -46,209 +40,190 @@ import java.util.WeakHashMap;
 // path. And it's used to identify a specific media set even if the process is
 // killed and re-created, so child keys should be stable identifiers.
 
-public class DataManager implements StitchingChangeListener {
-    public static final int INCLUDE_IMAGE = 1;
-    public static final int INCLUDE_LOCAL_ONLY = 4;
-    public static final int INCLUDE_LOCAL_IMAGE_ONLY =
-            INCLUDE_LOCAL_ONLY | INCLUDE_IMAGE;
+public class DataManager {
+	public static final int INCLUDE_IMAGE = 1;
+	public static final int INCLUDE_LOCAL_ONLY = 4;
+	public static final int INCLUDE_LOCAL_IMAGE_ONLY = INCLUDE_LOCAL_ONLY | INCLUDE_IMAGE;
 
-    // Any one who would like to access data should require this lock
-    // to prevent concurrency issue.
-    public static final Object LOCK = new Object();
+	// Any one who would like to access data should require this lock
+	// to prevent concurrency issue.
+	public static final Object LOCK = new Object();
 
-    private static final String TAG = "DataManager";
+	private static final String TAG = "DataManager";
 
-    private final Handler mDefaultMainHandler;
+	private final Handler mDefaultMainHandler;
 
-    private GalleryApp mApplication;
-    private int mActiveCount = 0;
+	private final GalleryApp mApplication;
+	private int mActiveCount = 0;
 
-    private HashMap<Uri, NotifyBroker> mNotifierMap =
-            new HashMap<Uri, NotifyBroker>();
+	private final HashMap<Uri, NotifyBroker> mNotifierMap = new HashMap<Uri, NotifyBroker>();
 
+	private final HashMap<String, MediaSource> mSourceMap = new LinkedHashMap<String, MediaSource>();
 
-    private HashMap<String, MediaSource> mSourceMap =
-            new LinkedHashMap<String, MediaSource>();
+	public DataManager(final GalleryApp application) {
+		mApplication = application;
+		mDefaultMainHandler = new Handler(application.getMainLooper());
+	}
 
-    public DataManager(GalleryApp application) {
-        mApplication = application;
-        mDefaultMainHandler = new Handler(application.getMainLooper());
-    }
+	public void delete(final Path path) {
+		getMediaObject(path).delete();
+	}
 
-    public synchronized void initializeSourceMap() {
-        if (!mSourceMap.isEmpty()) return;
+	public Path findPathByUri(final Uri uri, final String type) {
+		if (uri == null) return null;
+		for (final MediaSource source : mSourceMap.values()) {
+			final Path path = source.findPathByUri(uri, type);
+			if (path != null) return path;
+		}
+		return null;
+	}
 
-        // the order matters, the UriSource must come last
-        addSource(new UriSource(mApplication));
+	public Uri getContentUri(final Path path) {
+		return getMediaObject(path).getContentUri();
+	}
 
-        if (mActiveCount > 0) {
-            for (MediaSource source : mSourceMap.values()) {
-                source.resume();
-            }
-        }
-    }
-
-    // open for debug
-    void addSource(MediaSource source) {
-        if (source == null) return;
-        mSourceMap.put(source.getPrefix(), source);
-    }
-
-    // A common usage of this method is:
-    // synchronized (DataManager.LOCK) {
-    //     MediaObject object = peekMediaObject(path);
-    //     if (object == null) {
-    //         object = createMediaObject(...);
-    //     }
-    // }
-    public MediaObject peekMediaObject(Path path) {
-        return path.getObject();
-    }
-
-    public MediaObject getMediaObject(Path path) {
-        synchronized (LOCK) {
-            MediaObject obj = path.getObject();
-            if (obj != null) return obj;
-
-            MediaSource source = mSourceMap.get(path.getPrefix());
-            if (source == null) {
-                Log.w(TAG, "cannot find media source for path: " + path);
-                return null;
-            }
-
-            try {
-                MediaObject object = source.createMediaObject(path);
-                if (object == null) {
-                    Log.w(TAG, "cannot create media object: " + path);
-                }
-                return object;
-            } catch (Throwable t) {
-                Log.w(TAG, "exception in creating media object: " + path, t);
-                return null;
-            }
-        }
-    }
-
-    public MediaObject getMediaObject(String s) {
-        return getMediaObject(Path.fromString(s));
-    }
-
-    // The following methods forward the request to the proper object.
-    public int getSupportedOperations(Path path) {
-        return MediaObject.SUPPORT_FULL_IMAGE;
-    }
-
-    public void delete(Path path) {
-        getMediaObject(path).delete();
-    }
-
-    public void rotate(Path path, int degrees) {
-        getMediaObject(path).rotate(degrees);
-    }
-
-    public Uri getContentUri(Path path) {
-        return getMediaObject(path).getContentUri();
-    }
-
-    public int getMediaType(Path path) {
-        return getMediaObject(path).getMediaType();
-    }
-
-    public Path findPathByUri(Uri uri, String type) {
-        if (uri == null) return null;
-        for (MediaSource source : mSourceMap.values()) {
-            Path path = source.findPathByUri(uri, type);
-            if (path != null) return path;
-        }
-        return null;
-    }
-
-    public Path getDefaultSetOf(Path item) {
+	public Path getDefaultSetOf(final Path item) {
 		if (item == null) return null;
-        MediaSource source = mSourceMap.get(item.getPrefix());
-        return source == null ? null : source.getDefaultSetOf(item);
-    }
+		final MediaSource source = mSourceMap.get(item.getPrefix());
+		return source == null ? null : source.getDefaultSetOf(item);
+	}
 
-    // Returns number of bytes used by cached pictures currently downloaded.
-    public long getTotalUsedCacheSize() {
-        long sum = 0;
-        for (MediaSource source : mSourceMap.values()) {
-            sum += source.getTotalUsedCacheSize();
-        }
-        return sum;
-    }
+	public MediaObject getMediaObject(final Path path) {
+		synchronized (LOCK) {
+			final MediaObject obj = path.getObject();
+			if (obj != null) return obj;
 
-    // Returns number of bytes used by cached pictures if all pending
-    // downloads and removals are completed.
-    public long getTotalTargetCacheSize() {
-        long sum = 0;
-        for (MediaSource source : mSourceMap.values()) {
-            sum += source.getTotalTargetCacheSize();
-        }
-        return sum;
-    }
+			final MediaSource source = mSourceMap.get(path.getPrefix());
+			if (source == null) {
+				Log.w(TAG, "cannot find media source for path: " + path);
+				return null;
+			}
 
-    public void registerChangeNotifier(Uri uri, ChangeNotifier notifier) {
-        NotifyBroker broker = null;
-        synchronized (mNotifierMap) {
-            broker = mNotifierMap.get(uri);
-            if (broker == null) {
-                broker = new NotifyBroker(mDefaultMainHandler);
-                mApplication.getContentResolver()
-                        .registerContentObserver(uri, true, broker);
-                mNotifierMap.put(uri, broker);
-            }
-        }
-        broker.registerNotifier(notifier);
-    }
+			try {
+				final MediaObject object = source.createMediaObject(path);
+				if (object == null) {
+					Log.w(TAG, "cannot create media object: " + path);
+				}
+				return object;
+			} catch (final Throwable t) {
+				Log.w(TAG, "exception in creating media object: " + path, t);
+				return null;
+			}
+		}
+	}
 
-    public void resume() {
-        if (++mActiveCount == 1) {
-            for (MediaSource source : mSourceMap.values()) {
-                source.resume();
-            }
-        }
-    }
+	public MediaObject getMediaObject(final String s) {
+		return getMediaObject(Path.fromString(s));
+	}
 
-    public void pause() {
-        if (--mActiveCount == 0) {
-            for (MediaSource source : mSourceMap.values()) {
-                source.pause();
-            }
-        }
-    }
+	public int getMediaType(final Path path) {
+		return getMediaObject(path).getMediaType();
+	}
 
-    private static class NotifyBroker extends ContentObserver {
-        private WeakHashMap<ChangeNotifier, Object> mNotifiers =
-                new WeakHashMap<ChangeNotifier, Object>();
+	// The following methods forward the request to the proper object.
+	public int getSupportedOperations(final Path path) {
+		return MediaObject.SUPPORT_FULL_IMAGE;
+	}
 
-        public NotifyBroker(Handler handler) {
-            super(handler);
-        }
+	// Returns number of bytes used by cached pictures if all pending
+	// downloads and removals are completed.
+	public long getTotalTargetCacheSize() {
+		long sum = 0;
+		for (final MediaSource source : mSourceMap.values()) {
+			sum += source.getTotalTargetCacheSize();
+		}
+		return sum;
+	}
 
-        public synchronized void registerNotifier(ChangeNotifier notifier) {
-            mNotifiers.put(notifier, null);
-        }
+	// Returns number of bytes used by cached pictures currently downloaded.
+	public long getTotalUsedCacheSize() {
+		long sum = 0;
+		for (final MediaSource source : mSourceMap.values()) {
+			sum += source.getTotalUsedCacheSize();
+		}
+		return sum;
+	}
 
-        @Override
-        public synchronized void onChange(boolean selfChange) {
-            for(ChangeNotifier notifier : mNotifiers.keySet()) {
-                notifier.onChange(selfChange);
-            }
-        }
-    }
+	public synchronized void initializeSourceMap() {
+		if (!mSourceMap.isEmpty()) return;
 
-    @Override
-    public void onStitchingQueued(Uri uri) {
-        // Do nothing.
-    }
+		// the order matters, the UriSource must come last
+		addSource(new UriSource(mApplication));
 
-    @Override
-    public void onStitchingResult(Uri uri) {
-    }
+		if (mActiveCount > 0) {
+			for (final MediaSource source : mSourceMap.values()) {
+				source.resume();
+			}
+		}
+	}
 
-    @Override
-    public void onStitchingProgress(Uri uri, int progress) {
-        // Do nothing.
-    }
+
+	public void pause() {
+		if (--mActiveCount == 0) {
+			for (final MediaSource source : mSourceMap.values()) {
+				source.pause();
+			}
+		}
+	}
+
+	// A common usage of this method is:
+	// synchronized (DataManager.LOCK) {
+	// MediaObject object = peekMediaObject(path);
+	// if (object == null) {
+	// object = createMediaObject(...);
+	// }
+	// }
+	public MediaObject peekMediaObject(final Path path) {
+		return path.getObject();
+	}
+
+	public void registerChangeNotifier(final Uri uri, final ChangeNotifier notifier) {
+		NotifyBroker broker = null;
+		synchronized (mNotifierMap) {
+			broker = mNotifierMap.get(uri);
+			if (broker == null) {
+				broker = new NotifyBroker(mDefaultMainHandler);
+				mApplication.getContentResolver().registerContentObserver(uri, true, broker);
+				mNotifierMap.put(uri, broker);
+			}
+		}
+		broker.registerNotifier(notifier);
+	}
+
+	public void resume() {
+		if (++mActiveCount == 1) {
+			for (final MediaSource source : mSourceMap.values()) {
+				source.resume();
+			}
+		}
+	}
+
+	public void rotate(final Path path, final int degrees) {
+		getMediaObject(path).rotate(degrees);
+	}
+
+	// open for debug
+	void addSource(final MediaSource source) {
+		if (source == null) return;
+		mSourceMap.put(source.getPrefix(), source);
+	}
+
+	private static class NotifyBroker extends ContentObserver {
+		private final WeakHashMap<ChangeNotifier, Object> mNotifiers = new WeakHashMap<ChangeNotifier, Object>();
+
+		public NotifyBroker(final Handler handler) {
+			super(handler);
+		}
+
+		@Override
+		public synchronized void onChange(final boolean selfChange) {
+			for (final ChangeNotifier notifier : mNotifiers.keySet()) {
+				notifier.onChange(selfChange);
+			}
+		}
+
+		public synchronized void registerNotifier(final ChangeNotifier notifier) {
+			mNotifiers.put(notifier, null);
+		}
+	}
 }

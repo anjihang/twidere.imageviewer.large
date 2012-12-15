@@ -18,32 +18,32 @@ package org.mariotaku.gallery3d.util;
 
 // This is an array whose index ranges from min to max (inclusive).
 public class RangeBoolArray {
-    private boolean[] mData;
-    private int mOffset;
+	private final boolean[] mData;
+	private final int mOffset;
 
-    public RangeBoolArray(int min, int max) {
-        mData = new boolean[max - min + 1];
-        mOffset = min;
-    }
+	// Wraps around an existing array
+	public RangeBoolArray(final boolean[] src, final int min, final int max) {
+		mData = src;
+		mOffset = min;
+	}
 
-    // Wraps around an existing array
-    public RangeBoolArray(boolean[] src, int min, int max) {
-        mData = src;
-        mOffset = min;
-    }
+	public RangeBoolArray(final int min, final int max) {
+		mData = new boolean[max - min + 1];
+		mOffset = min;
+	}
 
-    public void put(int i, boolean object) {
-        mData[i - mOffset] = object;
-    }
+	public boolean get(final int i) {
+		return mData[i - mOffset];
+	}
 
-    public boolean get(int i) {
-        return mData[i - mOffset];
-    }
+	public int indexOf(final boolean object) {
+		for (int i = 0; i < mData.length; i++) {
+			if (mData[i] == object) return i + mOffset;
+		}
+		return Integer.MAX_VALUE;
+	}
 
-    public int indexOf(boolean object) {
-        for (int i = 0; i < mData.length; i++) {
-            if (mData[i] == object) return i + mOffset;
-        }
-        return Integer.MAX_VALUE;
-    }
+	public void put(final int i, final boolean object) {
+		mData[i - mOffset] = object;
+	}
 }

@@ -16,11 +16,6 @@
 
 package org.mariotaku.gallery3d.data;
 
-import android.media.ExifInterface;
-
-import org.mariotaku.gallery3d.R;
-
-import java.io.IOException;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map.Entry;
@@ -28,50 +23,50 @@ import java.util.TreeMap;
 
 public class MediaDetails implements Iterable<Entry<Integer, Object>> {
 
-    private TreeMap<Integer, Object> mDetails = new TreeMap<Integer, Object>();
-    private HashMap<Integer, Integer> mUnits = new HashMap<Integer, Integer>();
+	private final TreeMap<Integer, Object> mDetails = new TreeMap<Integer, Object>();
+	private final HashMap<Integer, Integer> mUnits = new HashMap<Integer, Integer>();
 
-    public static final int INDEX_TITLE = 1;
-    public static final int INDEX_DESCRIPTION = 2;
-    ///public static final int INDEX_DATETIME = 3;
-    //public static final int INDEX_LOCATION = 4;
-    public static final int INDEX_WIDTH = 5;
-    public static final int INDEX_HEIGHT = 6;
-    public static final int INDEX_ORIENTATION = 7;
-    //public static final int INDEX_DURATION = 8;
-    public static final int INDEX_MIMETYPE = 9;
-    //public static final int INDEX_SIZE = 10;
+	public static final int INDEX_TITLE = 1;
+	public static final int INDEX_DESCRIPTION = 2;
+	// /public static final int INDEX_DATETIME = 3;
+	// public static final int INDEX_LOCATION = 4;
+	public static final int INDEX_WIDTH = 5;
+	public static final int INDEX_HEIGHT = 6;
+	public static final int INDEX_ORIENTATION = 7;
+	// public static final int INDEX_DURATION = 8;
+	public static final int INDEX_MIMETYPE = 9;
+	// public static final int INDEX_SIZE = 10;
 
-    // Put this last because it may be long.
-    public static final int INDEX_PATH = 200;
+	// Put this last because it may be long.
+	public static final int INDEX_PATH = 200;
 
-    public void addDetail(int index, Object value) {
-        mDetails.put(index, value);
-    }
+	public void addDetail(final int index, final Object value) {
+		mDetails.put(index, value);
+	}
 
-    public Object getDetail(int index) {
-        return mDetails.get(index);
-    }
+	public Object getDetail(final int index) {
+		return mDetails.get(index);
+	}
 
-    public int size() {
-        return mDetails.size();
-    }
+	public int getUnit(final int index) {
+		return mUnits.get(index);
+	}
 
-    @Override
-    public Iterator<Entry<Integer, Object>> iterator() {
-        return mDetails.entrySet().iterator();
-    }
+	public boolean hasUnit(final int index) {
+		return mUnits.containsKey(index);
+	}
 
-    public void setUnit(int index, int unit) {
-        mUnits.put(index, unit);
-    }
+	@Override
+	public Iterator<Entry<Integer, Object>> iterator() {
+		return mDetails.entrySet().iterator();
+	}
 
-    public boolean hasUnit(int index) {
-        return mUnits.containsKey(index);
-    }
+	public void setUnit(final int index, final int unit) {
+		mUnits.put(index, unit);
+	}
 
-    public int getUnit(int index) {
-        return mUnits.get(index);
-    }
+	public int size() {
+		return mDetails.size();
+	}
 
 }

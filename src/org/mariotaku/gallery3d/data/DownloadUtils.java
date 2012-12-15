@@ -16,10 +16,6 @@
 
 package org.mariotaku.gallery3d.data;
 
-import org.mariotaku.gallery3d.common.Utils;
-import org.mariotaku.gallery3d.util.ThreadPool.CancelListener;
-import org.mariotaku.gallery3d.util.ThreadPool.JobContext;
-
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -28,52 +24,57 @@ import java.io.InterruptedIOException;
 import java.io.OutputStream;
 import java.net.URL;
 
+import org.mariotaku.gallery3d.common.Utils;
+import org.mariotaku.gallery3d.util.ThreadPool.CancelListener;
+import org.mariotaku.gallery3d.util.ThreadPool.JobContext;
+
+import android.util.Log;
+
 public class DownloadUtils {
-    private static final String TAG = "DownloadService";
+	private static final String TAG = "DownloadService";
 
-    public static boolean requestDownload(JobContext jc, URL url, File file) {
-        FileOutputStream fos = null;
-        try {
-            fos = new FileOutputStream(file);
-            return download(jc, url, fos);
-        } catch (Throwable t) {
-            return false;
-        } finally {
-            Utils.closeSilently(fos);
-        }
-    }
+	public static boolean download(final JobContext jc, final URL url, final OutputStream output) {
+		InputStream input = null;
+		try {
+			input = url.openStream();
+			dump(jc, input, output);
+			return true;
+		} catch (final Throwable t) {
+			Log.w(TAG, "fail to download", t);
+			return false;
+		} finally {
+			Utils.closeSilently(input);
+		}
+	}
 
-    public static void dump(JobContext jc, InputStream is, OutputStream os)
-            throws IOException {
-        byte buffer[] = new byte[4096];
-        int rc = is.read(buffer, 0, buffer.length);
-        final Thread thread = Thread.currentThread();
-        jc.setCancelListener(new CancelListener() {
-            @Override
-            public void onCancel() {
-                thread.interrupt();
-            }
-        });
-        while (rc > 0) {
-            if (jc.isCancelled()) throw new InterruptedIOException();
-            os.write(buffer, 0, rc);
-            rc = is.read(buffer, 0, buffer.length);
-        }
-        jc.setCancelListener(null);
-        Thread.interrupted(); // consume the interrupt signal
-    }
+	public static void dump(final JobContext jc, final InputStream is, final OutputStream os) throws IOException {
+		final byte buffer[] = new byte[4096];
+		int rc = is.read(buffer, 0, buffer.length);
+		final Thread thread = Thread.currentThread();
+		jc.setCancelListener(new CancelListener() {
+			@Override
+			public void onCancel() {
+				thread.interrupt();
+			}
+		});
+		while (rc > 0) {
+			if (jc.isCancelled()) throw new InterruptedIOException();
+			os.write(buffer, 0, rc);
+			rc = is.read(buffer, 0, buffer.length);
+		}
+		jc.setCancelListener(null);
+		Thread.interrupted(); // consume the interrupt signal
+	}
 
-    public static boolean download(JobContext jc, URL url, OutputStream output) {
-        InputStream input = null;
-        try {
-            input = url.openStream();
-            dump(jc, input, output);
-            return true;
-        } catch (Throwable t) {
-            Log.w(TAG, "fail to download", t);
-            return false;
-        } finally {
-            Utils.closeSilently(input);
-        }
-    }
+	public static boolean requestDownload(final JobContext jc, final URL url, final File file) {
+		FileOutputStream fos = null;
+		try {
+			fos = new FileOutputStream(file);
+			return download(jc, url, fos);
+		} catch (final Throwable t) {
+			return false;
+		} finally {
+			Utils.closeSilently(fos);
+		}
+	}
 }

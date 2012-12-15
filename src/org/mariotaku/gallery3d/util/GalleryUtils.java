@@ -16,28 +16,9 @@
 
 package org.mariotaku.gallery3d.util;
 
-import android.annotation.TargetApi;
-import android.content.ActivityNotFoundException;
-import android.content.ComponentName;
-import android.content.Context;
-import android.content.Intent;
-import android.content.SharedPreferences;
-import android.content.pm.PackageManager;
-import android.content.pm.ResolveInfo;
-import android.content.res.Resources;
-import android.graphics.Color;
-import android.net.Uri;
-import android.os.ConditionVariable;
-import android.os.Environment;
-import android.os.StatFs;
-import android.preference.PreferenceManager;
-import android.provider.MediaStore;
-import android.util.DisplayMetrics;
-import android.util.Log;
-import android.view.WindowManager;
+import java.util.Arrays;
 
 import org.mariotaku.gallery3d.R;
-import org.mariotaku.gallery3d.app.Gallery;
 import org.mariotaku.gallery3d.common.ApiHelper;
 import org.mariotaku.gallery3d.data.DataManager;
 import org.mariotaku.gallery3d.data.MediaItem;
@@ -45,222 +26,217 @@ import org.mariotaku.gallery3d.ui.TiledScreenNail;
 import org.mariotaku.gallery3d.util.ThreadPool.CancelListener;
 import org.mariotaku.gallery3d.util.ThreadPool.JobContext;
 
-import java.util.Arrays;
-import java.util.List;
-import java.util.Locale;
+import android.annotation.TargetApi;
+import android.content.Context;
+import android.content.Intent;
+import android.content.res.Resources;
+import android.graphics.Color;
+import android.os.ConditionVariable;
+import android.os.Environment;
+import android.os.StatFs;
+import android.util.DisplayMetrics;
+import android.util.Log;
+import android.view.WindowManager;
 
 public class GalleryUtils {
-    private static final String TAG = "GalleryUtils";
+	private static final String TAG = "GalleryUtils";
 
-    public static final String MIME_TYPE_IMAGE = "image/*";
-    public static final String MIME_TYPE_VIDEO = "video/*";
-    public static final String MIME_TYPE_PANORAMA360 = "application/vnd.google.panorama360+jpg";
-    public static final String MIME_TYPE_ALL = "*/*";
+	public static final String MIME_TYPE_IMAGE = "image/*";
+	public static final String MIME_TYPE_VIDEO = "video/*";
+	public static final String MIME_TYPE_PANORAMA360 = "application/vnd.google.panorama360+jpg";
+	public static final String MIME_TYPE_ALL = "*/*";
 
-    private static final String DIR_TYPE_IMAGE = "vnd.android.cursor.dir/image";
+	private static final String DIR_TYPE_IMAGE = "vnd.android.cursor.dir/image";
 
-    private static float sPixelDensity = -1f;
+	private static float sPixelDensity = -1f;
 
-    public static void initialize(Context context) {
-        DisplayMetrics metrics = new DisplayMetrics();
-        WindowManager wm = (WindowManager)
-                context.getSystemService(Context.WINDOW_SERVICE);
-        wm.getDefaultDisplay().getMetrics(metrics);
-        sPixelDensity = metrics.density;
-        Resources r = context.getResources();
-        TiledScreenNail.setPlaceholderColor(r.getColor(
-                R.color.bitmap_screennail_placeholder));
-        initializeThumbnailSizes(metrics, r);
-    }
+	private static volatile Thread sCurrentThread;
 
-    private static void initializeThumbnailSizes(DisplayMetrics metrics, Resources r) {
-        int maxPixels = Math.max(metrics.heightPixels, metrics.widthPixels);
+	private static volatile boolean sWarned;
 
-        // For screen-nails, we never need to completely fill the screen
-        MediaItem.setThumbnailSizes(maxPixels / 2, maxPixels / 5);
-        TiledScreenNail.setMaxSide(maxPixels / 2);
-    }
+	private static final double RAD_PER_DEG = Math.PI / 180.0;
 
-    public static boolean isHighResolution(Context context) {
-        DisplayMetrics metrics = new DisplayMetrics();
-        WindowManager wm = (WindowManager)
-                context.getSystemService(Context.WINDOW_SERVICE);
-        wm.getDefaultDisplay().getMetrics(metrics);
-        return metrics.heightPixels > 2048 ||  metrics.widthPixels > 2048;
-    }
+	private static final double EARTH_RADIUS_METERS = 6367000.0;
 
-    public static float[] intColorToFloatARGBArray(int from) {
-        return new float[] {
-            Color.alpha(from) / 255f,
-            Color.red(from) / 255f,
-            Color.green(from) / 255f,
-            Color.blue(from) / 255f
-        };
-    }
+	public static double accurateDistanceMeters(final double lat1, final double lng1, final double lat2,
+			final double lng2) {
+		final double dlat = Math.sin(0.5 * (lat2 - lat1));
+		final double dlng = Math.sin(0.5 * (lng2 - lng1));
+		final double x = dlat * dlat + dlng * dlng * Math.cos(lat1) * Math.cos(lat2);
+		return 2 * Math.atan2(Math.sqrt(x), Math.sqrt(Math.max(0.0, 1.0 - x))) * EARTH_RADIUS_METERS;
+	}
 
-    public static float dpToPixel(float dp) {
-        return sPixelDensity * dp;
-    }
+	public static void assertNotInRenderThread() {
+		if (!sWarned) {
+			if (Thread.currentThread() == sCurrentThread) {
+				sWarned = true;
+				Log.w(TAG, new Throwable("Should not do this in render thread"));
+			}
+		}
+	}
 
-    public static int dpToPixel(int dp) {
-        return Math.round(dpToPixel((float) dp));
-    }
+	@TargetApi(ApiHelper.VERSION_CODES.HONEYCOMB)
+	public static int determineTypeBits(final Context context, final Intent intent) {
+		int typeBits = 0;
+		final String type = intent.resolveType(context);
 
-    public static int meterToPixel(float meter) {
-        // 1 meter = 39.37 inches, 1 inch = 160 dp.
-        return Math.round(dpToPixel(meter * 39.37f * 160));
-    }
+		if (MIME_TYPE_IMAGE.equals(type) || DIR_TYPE_IMAGE.equals(type)) {
+			typeBits = DataManager.INCLUDE_IMAGE;
+		}
+		if (ApiHelper.HAS_INTENT_EXTRA_LOCAL_ONLY) {
+			if (intent.getBooleanExtra(Intent.EXTRA_LOCAL_ONLY, false)) {
+				typeBits |= DataManager.INCLUDE_LOCAL_ONLY;
+			}
+		}
 
-    public static byte[] getBytes(String in) {
-        byte[] result = new byte[in.length() * 2];
-        int output = 0;
-        for (char ch : in.toCharArray()) {
-            result[output++] = (byte) (ch & 0xFF);
-            result[output++] = (byte) (ch >> 8);
-        }
-        return result;
-    }
+		return typeBits;
+	}
 
-    // Below are used the detect using database in the render thread. It only
-    // works most of the time, but that's ok because it's for debugging only.
+	public static float dpToPixel(final float dp) {
+		return sPixelDensity * dp;
+	}
 
-    private static volatile Thread sCurrentThread;
-    private static volatile boolean sWarned;
+	// Below are used the detect using database in the render thread. It only
+	// works most of the time, but that's ok because it's for debugging only.
 
-    public static void setRenderThread() {
-        sCurrentThread = Thread.currentThread();
-    }
+	public static int dpToPixel(final int dp) {
+		return Math.round(dpToPixel((float) dp));
+	}
 
-    public static void assertNotInRenderThread() {
-        if (!sWarned) {
-            if (Thread.currentThread() == sCurrentThread) {
-                sWarned = true;
-                Log.w(TAG, new Throwable("Should not do this in render thread"));
-            }
-        }
-    }
+	// For debugging, it will block the caller for timeout millis.
+	public static void fakeBusy(final JobContext jc, final int timeout) {
+		final ConditionVariable cv = new ConditionVariable();
+		jc.setCancelListener(new CancelListener() {
+			@Override
+			public void onCancel() {
+				cv.open();
+			}
+		});
+		cv.block(timeout);
+		jc.setCancelListener(null);
+	}
 
-    private static final double RAD_PER_DEG = Math.PI / 180.0;
-    private static final double EARTH_RADIUS_METERS = 6367000.0;
+	public static double fastDistanceMeters(final double latRad1, final double lngRad1, final double latRad2,
+			final double lngRad2) {
+		if (Math.abs(latRad1 - latRad2) > RAD_PER_DEG || Math.abs(lngRad1 - lngRad2) > RAD_PER_DEG)
+			return accurateDistanceMeters(latRad1, lngRad1, latRad2, lngRad2);
+		// Approximate sin(x) = x.
+		final double sineLat = latRad1 - latRad2;
 
-    public static double fastDistanceMeters(double latRad1, double lngRad1,
-            double latRad2, double lngRad2) {
-       if ((Math.abs(latRad1 - latRad2) > RAD_PER_DEG)
-             || (Math.abs(lngRad1 - lngRad2) > RAD_PER_DEG)) {
-           return accurateDistanceMeters(latRad1, lngRad1, latRad2, lngRad2);
-       }
-       // Approximate sin(x) = x.
-       double sineLat = (latRad1 - latRad2);
+		// Approximate sin(x) = x.
+		final double sineLng = lngRad1 - lngRad2;
 
-       // Approximate sin(x) = x.
-       double sineLng = (lngRad1 - lngRad2);
+		// Approximate cos(lat1) * cos(lat2) using
+		// cos((lat1 + lat2)/2) ^ 2
+		double cosTerms = Math.cos((latRad1 + latRad2) / 2.0);
+		cosTerms = cosTerms * cosTerms;
+		double trigTerm = sineLat * sineLat + cosTerms * sineLng * sineLng;
+		trigTerm = Math.sqrt(trigTerm);
 
-       // Approximate cos(lat1) * cos(lat2) using
-       // cos((lat1 + lat2)/2) ^ 2
-       double cosTerms = Math.cos((latRad1 + latRad2) / 2.0);
-       cosTerms = cosTerms * cosTerms;
-       double trigTerm = sineLat * sineLat + cosTerms * sineLng * sineLng;
-       trigTerm = Math.sqrt(trigTerm);
+		// Approximate arcsin(x) = x
+		return EARTH_RADIUS_METERS * trigTerm;
+	}
 
-       // Approximate arcsin(x) = x
-       return EARTH_RADIUS_METERS * trigTerm;
-    }
+	// Returns a (localized) string for the given duration (in seconds).
+	public static String formatDuration(final Context context, final int duration) {
+		final int h = duration / 3600;
+		final int m = (duration - h * 3600) / 60;
+		final int s = duration - (h * 3600 + m * 60);
+		String durationValue;
+		if (h == 0) {
+			durationValue = String.format(context.getString(R.string.details_ms), m, s);
+		} else {
+			durationValue = String.format(context.getString(R.string.details_hms), h, m, s);
+		}
+		return durationValue;
+	}
 
-    public static double accurateDistanceMeters(double lat1, double lng1,
-            double lat2, double lng2) {
-        double dlat = Math.sin(0.5 * (lat2 - lat1));
-        double dlng = Math.sin(0.5 * (lng2 - lng1));
-        double x = dlat * dlat + dlng * dlng * Math.cos(lat1) * Math.cos(lat2);
-        return (2 * Math.atan2(Math.sqrt(x), Math.sqrt(Math.max(0.0,
-                1.0 - x)))) * EARTH_RADIUS_METERS;
-    }
+	public static int getBucketId(final String path) {
+		return path.toLowerCase().hashCode();
+	}
 
+	public static byte[] getBytes(final String in) {
+		final byte[] result = new byte[in.length() * 2];
+		int output = 0;
+		for (final char ch : in.toCharArray()) {
+			result[output++] = (byte) (ch & 0xFF);
+			result[output++] = (byte) (ch >> 8);
+		}
+		return result;
+	}
 
-    public static final double toMile(double meter) {
-        return meter / 1609;
-    }
+	public static int getSelectionModePrompt(final int typeBits) {
+		return R.string.select_image;
+	}
 
-    // For debugging, it will block the caller for timeout millis.
-    public static void fakeBusy(JobContext jc, int timeout) {
-        final ConditionVariable cv = new ConditionVariable();
-        jc.setCancelListener(new CancelListener() {
-            @Override
-            public void onCancel() {
-                cv.open();
-            }
-        });
-        cv.block(timeout);
-        jc.setCancelListener(null);
-    }
+	public static boolean hasSpaceForSize(final long size) {
+		final String state = Environment.getExternalStorageState();
+		if (!Environment.MEDIA_MOUNTED.equals(state)) return false;
 
-    public static void setViewPointMatrix(
-            float matrix[], float x, float y, float z) {
-        // The matrix is
-        // -z,  0,  x,  0
-        //  0, -z,  y,  0
-        //  0,  0,  1,  0
-        //  0,  0,  1, -z
-        Arrays.fill(matrix, 0, 16, 0);
-        matrix[0] = matrix[5] = matrix[15] = -z;
-        matrix[8] = x;
-        matrix[9] = y;
-        matrix[10] = matrix[11] = 1;
-    }
+		final String path = Environment.getExternalStorageDirectory().getPath();
+		try {
+			final StatFs stat = new StatFs(path);
+			return stat.getAvailableBlocks() * (long) stat.getBlockSize() > size;
+		} catch (final Exception e) {
+			Log.i(TAG, "Fail to access external storage", e);
+		}
+		return false;
+	}
 
-    public static int getBucketId(String path) {
-        return path.toLowerCase().hashCode();
-    }
+	public static void initialize(final Context context) {
+		final DisplayMetrics metrics = new DisplayMetrics();
+		final WindowManager wm = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
+		wm.getDefaultDisplay().getMetrics(metrics);
+		sPixelDensity = metrics.density;
+		final Resources r = context.getResources();
+		TiledScreenNail.setPlaceholderColor(r.getColor(R.color.bitmap_screennail_placeholder));
+		initializeThumbnailSizes(metrics, r);
+	}
 
-    // Returns a (localized) string for the given duration (in seconds).
-    public static String formatDuration(final Context context, int duration) {
-        int h = duration / 3600;
-        int m = (duration - h * 3600) / 60;
-        int s = duration - (h * 3600 + m * 60);
-        String durationValue;
-        if (h == 0) {
-            durationValue = String.format(context.getString(R.string.details_ms), m, s);
-        } else {
-            durationValue = String.format(context.getString(R.string.details_hms), h, m, s);
-        }
-        return durationValue;
-    }
+	public static float[] intColorToFloatARGBArray(final int from) {
+		return new float[] { Color.alpha(from) / 255f, Color.red(from) / 255f, Color.green(from) / 255f,
+				Color.blue(from) / 255f };
+	}
 
-    @TargetApi(ApiHelper.VERSION_CODES.HONEYCOMB)
-    public static int determineTypeBits(Context context, Intent intent) {
-        int typeBits = 0;
-        String type = intent.resolveType(context);
+	public static boolean isHighResolution(final Context context) {
+		final DisplayMetrics metrics = new DisplayMetrics();
+		final WindowManager wm = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
+		wm.getDefaultDisplay().getMetrics(metrics);
+		return metrics.heightPixels > 2048 || metrics.widthPixels > 2048;
+	}
 
-        if (MIME_TYPE_IMAGE.equals(type) ||
-                DIR_TYPE_IMAGE.equals(type)) {
-            typeBits = DataManager.INCLUDE_IMAGE;
-        }
-        if (ApiHelper.HAS_INTENT_EXTRA_LOCAL_ONLY) {
-            if (intent.getBooleanExtra(Intent.EXTRA_LOCAL_ONLY, false)) {
-                typeBits |= DataManager.INCLUDE_LOCAL_ONLY;
-            }
-        }
+	public static int meterToPixel(final float meter) {
+		// 1 meter = 39.37 inches, 1 inch = 160 dp.
+		return Math.round(dpToPixel(meter * 39.37f * 160));
+	}
 
-        return typeBits;
-    }
+	public static void setRenderThread() {
+		sCurrentThread = Thread.currentThread();
+	}
 
-    public static int getSelectionModePrompt(int typeBits) {
-        return R.string.select_image;
-    }
+	public static void setViewPointMatrix(final float matrix[], final float x, final float y, final float z) {
+		// The matrix is
+		// -z, 0, x, 0
+		// 0, -z, y, 0
+		// 0, 0, 1, 0
+		// 0, 0, 1, -z
+		Arrays.fill(matrix, 0, 16, 0);
+		matrix[0] = matrix[5] = matrix[15] = -z;
+		matrix[8] = x;
+		matrix[9] = y;
+		matrix[10] = matrix[11] = 1;
+	}
 
-    public static boolean hasSpaceForSize(long size) {
-        String state = Environment.getExternalStorageState();
-        if (!Environment.MEDIA_MOUNTED.equals(state)) {
-            return false;
-        }
+	public static final double toMile(final double meter) {
+		return meter / 1609;
+	}
 
-        String path = Environment.getExternalStorageDirectory().getPath();
-        try {
-            StatFs stat = new StatFs(path);
-            return stat.getAvailableBlocks() * (long) stat.getBlockSize() > size;
-        } catch (Exception e) {
-            Log.i(TAG, "Fail to access external storage", e);
-        }
-        return false;
-    }
+	private static void initializeThumbnailSizes(final DisplayMetrics metrics, final Resources r) {
+		final int maxPixels = Math.max(metrics.heightPixels, metrics.widthPixels);
+
+		// For screen-nails, we never need to completely fill the screen
+		MediaItem.setThumbnailSizes(maxPixels / 2, maxPixels / 5);
+		TiledScreenNail.setMaxSide(maxPixels / 2);
+	}
 
 }

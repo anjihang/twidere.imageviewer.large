@@ -21,74 +21,69 @@ import android.graphics.Rect;
 import android.util.TypedValue;
 
 public class ScrollBarView extends GLView {
-    @SuppressWarnings("unused")
-    private static final String TAG = "ScrollBarView";
+	@SuppressWarnings("unused")
+	private static final String TAG = "ScrollBarView";
 
-    private int mBarHeight;
+	private int mBarHeight;
 
-    private int mGripHeight;
-    private int mGripPosition;  // left side of the grip
-    private int mGripWidth;     // zero if the grip is disabled
-    private int mGivenGripWidth;
+	private final int mGripHeight;
+	private int mGripPosition; // left side of the grip
+	private int mGripWidth; // zero if the grip is disabled
+	private final int mGivenGripWidth;
 
-    private int mContentPosition;
-    private int mContentTotal;
+	private int mContentPosition;
+	private int mContentTotal;
 
-    private NinePatchTexture mScrollBarTexture;
+	private final NinePatchTexture mScrollBarTexture;
 
-    public ScrollBarView(Context context, int gripHeight, int gripWidth) {
-        TypedValue outValue = new TypedValue();
-        context.getTheme().resolveAttribute(
-                android.R.attr.scrollbarThumbHorizontal, outValue, true);
-        mScrollBarTexture = new NinePatchTexture(
-                context, outValue.resourceId);
-        mGripPosition = 0;
-        mGripWidth = 0;
-        mGivenGripWidth = gripWidth;
-        mGripHeight = gripHeight;
-    }
+	public ScrollBarView(final Context context, final int gripHeight, final int gripWidth) {
+		final TypedValue outValue = new TypedValue();
+		context.getTheme().resolveAttribute(android.R.attr.scrollbarThumbHorizontal, outValue, true);
+		mScrollBarTexture = new NinePatchTexture(context, outValue.resourceId);
+		mGripPosition = 0;
+		mGripWidth = 0;
+		mGivenGripWidth = gripWidth;
+		mGripHeight = gripHeight;
+	}
 
-    @Override
-    protected void onLayout(
-            boolean changed, int left, int top, int right, int bottom) {
-        if (!changed) return;
-        mBarHeight = bottom - top;
-    }
+	// The content position is between 0 to "total". The current position is
+	// in "position".
+	public void setContentPosition(final int position, final int total) {
+		if (position == mContentPosition && total == mContentTotal) return;
 
-    // The content position is between 0 to "total". The current position is
-    // in "position".
-    public void setContentPosition(int position, int total) {
-        if (position == mContentPosition && total == mContentTotal) {
-            return;
-        }
+		invalidate();
 
-        invalidate();
+		mContentPosition = position;
+		mContentTotal = total;
 
-        mContentPosition = position;
-        mContentTotal = total;
+		// If the grip cannot move, don't draw it.
+		if (mContentTotal <= 0) {
+			mGripPosition = 0;
+			mGripWidth = 0;
+			return;
+		}
 
-        // If the grip cannot move, don't draw it.
-        if (mContentTotal <= 0) {
-            mGripPosition = 0;
-            mGripWidth = 0;
-            return;
-        }
+		// Map from the content range to scroll bar range.
+		//
+		// mContentTotal --> getWidth() - mGripWidth
+		// mContentPosition --> mGripPosition
+		mGripWidth = mGivenGripWidth;
+		final float r = (getWidth() - mGripWidth) / (float) mContentTotal;
+		mGripPosition = Math.round(r * mContentPosition);
+	}
 
-        // Map from the content range to scroll bar range.
-        //
-        // mContentTotal --> getWidth() - mGripWidth
-        // mContentPosition --> mGripPosition
-        mGripWidth = mGivenGripWidth;
-        float r = (getWidth() - mGripWidth) / (float) mContentTotal;
-        mGripPosition = Math.round(r * mContentPosition);
-    }
+	@Override
+	protected void onLayout(final boolean changed, final int left, final int top, final int right, final int bottom) {
+		if (!changed) return;
+		mBarHeight = bottom - top;
+	}
 
-    @Override
-    protected void render(GLCanvas canvas) {
-        super.render(canvas);
-        if (mGripWidth == 0) return;
-        Rect b = bounds();
-        int y = (mBarHeight - mGripHeight) / 2;
-        mScrollBarTexture.draw(canvas, mGripPosition, y, mGripWidth, mGripHeight);
-    }
+	@Override
+	protected void render(final GLCanvas canvas) {
+		super.render(canvas);
+		if (mGripWidth == 0) return;
+		final Rect b = bounds();
+		final int y = (mBarHeight - mGripHeight) / 2;
+		mScrollBarTexture.draw(canvas, mGripPosition, y, mGripWidth, mGripHeight);
+	}
 }

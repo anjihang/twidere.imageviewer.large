@@ -16,82 +16,78 @@
 
 package org.mariotaku.gallery3d.ui;
 
-import android.content.Context;
-import android.view.ViewConfiguration;
-
 import org.mariotaku.gallery3d.common.OverScroller;
 import org.mariotaku.gallery3d.common.Utils;
 
+import android.content.Context;
+import android.view.ViewConfiguration;
+
 public class ScrollerHelper {
-    private OverScroller mScroller;
-    private int mOverflingDistance;
-    private boolean mOverflingEnabled;
+	private final OverScroller mScroller;
+	private final int mOverflingDistance;
+	private boolean mOverflingEnabled;
 
-    public ScrollerHelper(Context context) {
-        mScroller = new OverScroller(context);
-        ViewConfiguration configuration = ViewConfiguration.get(context);
-        mOverflingDistance = configuration.getScaledOverflingDistance();
-    }
+	public ScrollerHelper(final Context context) {
+		mScroller = new OverScroller(context);
+		final ViewConfiguration configuration = ViewConfiguration.get(context);
+		mOverflingDistance = configuration.getScaledOverflingDistance();
+	}
 
-    public void setOverfling(boolean enabled) {
-        mOverflingEnabled = enabled;
-    }
+	/**
+	 * Call this when you want to know the new location. The position will be
+	 * updated and can be obtained by getPosition(). Returns true if the
+	 * animation is not yet finished.
+	 */
+	public boolean advanceAnimation(final long currentTimeMillis) {
+		return mScroller.computeScrollOffset();
+	}
 
-    /**
-     * Call this when you want to know the new location. The position will be
-     * updated and can be obtained by getPosition(). Returns true if  the
-     * animation is not yet finished.
-     */
-    public boolean advanceAnimation(long currentTimeMillis) {
-        return mScroller.computeScrollOffset();
-    }
+	public void fling(final int velocity, final int min, final int max) {
+		final int currX = getPosition();
+		mScroller.fling(currX, 0, // startX, startY
+				velocity, 0, // velocityX, velocityY
+				min, max, // minX, maxX
+				0, 0, // minY, maxY
+				mOverflingEnabled ? mOverflingDistance : 0, 0);
+	}
 
-    public boolean isFinished() {
-        return mScroller.isFinished();
-    }
+	public void forceFinished() {
+		mScroller.forceFinished(true);
+	}
 
-    public void forceFinished() {
-        mScroller.forceFinished(true);
-    }
+	public float getCurrVelocity() {
+		return mScroller.getCurrVelocity();
+	}
 
-    public int getPosition() {
-        return mScroller.getCurrX();
-    }
+	public int getPosition() {
+		return mScroller.getCurrX();
+	}
 
-    public float getCurrVelocity() {
-        return mScroller.getCurrVelocity();
-    }
+	public boolean isFinished() {
+		return mScroller.isFinished();
+	}
 
-    public void setPosition(int position) {
-        mScroller.startScroll(
-                position, 0,    // startX, startY
-                0, 0, 0);       // dx, dy, duration
+	public void setOverfling(final boolean enabled) {
+		mOverflingEnabled = enabled;
+	}
 
-        // This forces the scroller to reach the final position.
-        mScroller.abortAnimation();
-    }
+	public void setPosition(final int position) {
+		mScroller.startScroll(position, 0, // startX, startY
+				0, 0, 0); // dx, dy, duration
 
-    public void fling(int velocity, int min, int max) {
-        int currX = getPosition();
-        mScroller.fling(
-                currX, 0,      // startX, startY
-                velocity, 0,   // velocityX, velocityY
-                min, max,      // minX, maxX
-                0, 0,          // minY, maxY
-                mOverflingEnabled ? mOverflingDistance : 0, 0);
-    }
+		// This forces the scroller to reach the final position.
+		mScroller.abortAnimation();
+	}
 
-    // Returns the distance that over the scroll limit.
-    public int startScroll(int distance, int min, int max) {
-        int currPosition = mScroller.getCurrX();
-        int finalPosition = mScroller.isFinished() ? currPosition :
-                mScroller.getFinalX();
-        int newPosition = Utils.clamp(finalPosition + distance, min, max);
-        if (newPosition != currPosition) {
-            mScroller.startScroll(
-                currPosition, 0,                    // startX, startY
-                newPosition - currPosition, 0, 0);  // dx, dy, duration
-        }
-        return finalPosition + distance - newPosition;
-    }
+	// Returns the distance that over the scroll limit.
+	public int startScroll(final int distance, final int min, final int max) {
+		final int currPosition = mScroller.getCurrX();
+		final int finalPosition = mScroller.isFinished() ? currPosition : mScroller.getFinalX();
+		final int newPosition = Utils.clamp(finalPosition + distance, min, max);
+		if (newPosition != currPosition) {
+			mScroller.startScroll(currPosition, 0, // startX, startY
+					newPosition - currPosition, 0, 0); // dx, dy, duration
+		}
+		return finalPosition + distance - newPosition;
+	}
 }

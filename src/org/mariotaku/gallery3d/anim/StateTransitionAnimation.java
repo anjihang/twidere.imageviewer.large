@@ -16,165 +16,167 @@
 
 package org.mariotaku.gallery3d.anim;
 
-import android.view.animation.AccelerateInterpolator;
-import android.view.animation.DecelerateInterpolator;
-import android.view.animation.Interpolator;
-
 import org.mariotaku.gallery3d.ui.GLCanvas;
 import org.mariotaku.gallery3d.ui.GLView;
 import org.mariotaku.gallery3d.ui.RawTexture;
 import org.mariotaku.gallery3d.ui.TiledScreenNail;
 
+import android.view.animation.DecelerateInterpolator;
+import android.view.animation.Interpolator;
+
 public class StateTransitionAnimation extends Animation {
 
-    public static class Spec {
-        public static final Spec OUTGOING;
-        public static final Spec INCOMING;
-        public static final Spec PHOTO_INCOMING;
+	private final Spec mTransitionSpec;
 
-        private static final Interpolator DEFAULT_INTERPOLATOR =
-                new DecelerateInterpolator();
+	private float mCurrentContentScale;
 
-        public int duration = 330;
-        public float backgroundAlphaFrom = 0;
-        public float backgroundAlphaTo = 0;
-        public float backgroundScaleFrom = 0;
-        public float backgroundScaleTo = 0;
-        public float contentAlphaFrom = 1;
-        public float contentAlphaTo = 1;
-        public float contentScaleFrom = 1;
-        public float contentScaleTo = 1;
-        public float overlayAlphaFrom = 0;
-        public float overlayAlphaTo = 0;
-        public float overlayScaleFrom = 0;
-        public float overlayScaleTo = 0;
-        public Interpolator interpolator = DEFAULT_INTERPOLATOR;
+	private float mCurrentContentAlpha;
+	private float mCurrentBackgroundScale;
+	private float mCurrentBackgroundAlpha;
+	private float mCurrentOverlayScale;
+	private float mCurrentOverlayAlpha;
+	private RawTexture mOldScreenTexture;
 
-        static {
-            OUTGOING = new Spec();
-            OUTGOING.backgroundAlphaFrom = 0.5f;
-            OUTGOING.backgroundAlphaTo = 0f;
-            OUTGOING.backgroundScaleFrom = 1f;
-            OUTGOING.backgroundScaleTo = 0f;
-            OUTGOING.contentAlphaFrom = 0.5f;
-            OUTGOING.contentAlphaTo = 1f;
-            OUTGOING.contentScaleFrom = 3f;
-            OUTGOING.contentScaleTo = 1f;
+	public StateTransitionAnimation(final Spec spec, final RawTexture oldScreen) {
+		mTransitionSpec = spec != null ? spec : Spec.OUTGOING;
+		setDuration(mTransitionSpec.duration);
+		setInterpolator(mTransitionSpec.interpolator);
+		mOldScreenTexture = oldScreen;
+		TiledScreenNail.disableDrawPlaceholder();
+	}
 
-            INCOMING = new Spec();
-            INCOMING.overlayAlphaFrom = 1f;
-            INCOMING.overlayAlphaTo = 0f;
-            INCOMING.overlayScaleFrom = 1f;
-            INCOMING.overlayScaleTo = 3f;
-            INCOMING.contentAlphaFrom = 0f;
-            INCOMING.contentAlphaTo = 1f;
-            INCOMING.contentScaleFrom = 0.25f;
-            INCOMING.contentScaleTo = 1f;
+	public StateTransitionAnimation(final Transition t, final RawTexture oldScreen) {
+		this(Spec.specForTransition(t), oldScreen);
+	}
 
-            PHOTO_INCOMING = INCOMING;
-        }
+	public void applyBackground(final GLView view, final GLCanvas canvas) {
+		if (mCurrentBackgroundAlpha > 0f) {
+			applyOldTexture(view, canvas, mCurrentBackgroundAlpha, mCurrentBackgroundScale, true);
+		}
+	}
 
-        private static Spec specForTransition(Transition t) {
-            switch (t) {
-                case Outgoing:
-                    return Spec.OUTGOING;
-                case Incoming:
-                    return Spec.INCOMING;
-                case PhotoIncoming:
-                    return Spec.PHOTO_INCOMING;
-                case None:
-                default:
-                    return null;
-            }
-        }
-    }
+	public void applyContentTransform(final GLView view, final GLCanvas canvas) {
+		final int xOffset = view.getWidth() / 2;
+		final int yOffset = view.getHeight() / 2;
+		canvas.translate(xOffset, yOffset);
+		canvas.scale(mCurrentContentScale, mCurrentContentScale, 1);
+		canvas.translate(-xOffset, -yOffset);
+		canvas.setAlpha(mCurrentContentAlpha);
+	}
 
-    public static enum Transition { None, Outgoing, Incoming, PhotoIncoming }
+	public void applyOverlay(final GLView view, final GLCanvas canvas) {
+		if (mCurrentOverlayAlpha > 0f) {
+			applyOldTexture(view, canvas, mCurrentOverlayAlpha, mCurrentOverlayScale, false);
+		}
+	}
 
-    private final Spec mTransitionSpec;
-    private float mCurrentContentScale;
-    private float mCurrentContentAlpha;
-    private float mCurrentBackgroundScale;
-    private float mCurrentBackgroundAlpha;
-    private float mCurrentOverlayScale;
-    private float mCurrentOverlayAlpha;
-    private RawTexture mOldScreenTexture;
+	@Override
+	public boolean calculate(final long currentTimeMillis) {
+		final boolean retval = super.calculate(currentTimeMillis);
+		if (!isActive()) {
+			if (mOldScreenTexture != null) {
+				mOldScreenTexture.recycle();
+				mOldScreenTexture = null;
+			}
+			TiledScreenNail.enableDrawPlaceholder();
+		}
+		return retval;
+	}
 
-    public StateTransitionAnimation(Transition t, RawTexture oldScreen) {
-        this(Spec.specForTransition(t), oldScreen);
-    }
+	@Override
+	protected void onCalculate(final float progress) {
+		mCurrentContentScale = mTransitionSpec.contentScaleFrom
+				+ (mTransitionSpec.contentScaleTo - mTransitionSpec.contentScaleFrom) * progress;
+		mCurrentContentAlpha = mTransitionSpec.contentAlphaFrom
+				+ (mTransitionSpec.contentAlphaTo - mTransitionSpec.contentAlphaFrom) * progress;
+		mCurrentBackgroundAlpha = mTransitionSpec.backgroundAlphaFrom
+				+ (mTransitionSpec.backgroundAlphaTo - mTransitionSpec.backgroundAlphaFrom) * progress;
+		mCurrentBackgroundScale = mTransitionSpec.backgroundScaleFrom
+				+ (mTransitionSpec.backgroundScaleTo - mTransitionSpec.backgroundScaleFrom) * progress;
+		mCurrentOverlayScale = mTransitionSpec.overlayScaleFrom
+				+ (mTransitionSpec.overlayScaleTo - mTransitionSpec.overlayScaleFrom) * progress;
+		mCurrentOverlayAlpha = mTransitionSpec.overlayAlphaFrom
+				+ (mTransitionSpec.overlayAlphaTo - mTransitionSpec.overlayAlphaFrom) * progress;
+	}
 
-    public StateTransitionAnimation(Spec spec, RawTexture oldScreen) {
-        mTransitionSpec = spec != null ? spec : Spec.OUTGOING;
-        setDuration(mTransitionSpec.duration);
-        setInterpolator(mTransitionSpec.interpolator);
-        mOldScreenTexture = oldScreen;
-        TiledScreenNail.disableDrawPlaceholder();
-    }
+	private void applyOldTexture(final GLView view, final GLCanvas canvas, final float alpha, final float scale,
+			final boolean clear) {
+		if (mOldScreenTexture == null) return;
+		if (clear) {
+			canvas.clearBuffer(view.getBackgroundColor());
+		}
+		canvas.save();
+		canvas.setAlpha(alpha);
+		final int xOffset = view.getWidth() / 2;
+		final int yOffset = view.getHeight() / 2;
+		canvas.translate(xOffset, yOffset);
+		canvas.scale(scale, scale, 1);
+		mOldScreenTexture.draw(canvas, -xOffset, -yOffset);
+		canvas.restore();
+	}
 
-    @Override
-    public boolean calculate(long currentTimeMillis) {
-        boolean retval = super.calculate(currentTimeMillis);
-        if (!isActive()) {
-            if (mOldScreenTexture != null) {
-                mOldScreenTexture.recycle();
-                mOldScreenTexture = null;
-            }
-            TiledScreenNail.enableDrawPlaceholder();
-        }
-        return retval;
-    }
+	public static class Spec {
+		public static final Spec OUTGOING;
+		public static final Spec INCOMING;
+		public static final Spec PHOTO_INCOMING;
 
-    @Override
-    protected void onCalculate(float progress) {
-        mCurrentContentScale = mTransitionSpec.contentScaleFrom
-                + (mTransitionSpec.contentScaleTo - mTransitionSpec.contentScaleFrom) * progress;
-        mCurrentContentAlpha = mTransitionSpec.contentAlphaFrom
-                + (mTransitionSpec.contentAlphaTo - mTransitionSpec.contentAlphaFrom) * progress;
-        mCurrentBackgroundAlpha = mTransitionSpec.backgroundAlphaFrom
-                + (mTransitionSpec.backgroundAlphaTo - mTransitionSpec.backgroundAlphaFrom)
-                * progress;
-        mCurrentBackgroundScale = mTransitionSpec.backgroundScaleFrom
-                + (mTransitionSpec.backgroundScaleTo - mTransitionSpec.backgroundScaleFrom)
-                * progress;
-        mCurrentOverlayScale = mTransitionSpec.overlayScaleFrom
-                + (mTransitionSpec.overlayScaleTo - mTransitionSpec.overlayScaleFrom) * progress;
-        mCurrentOverlayAlpha = mTransitionSpec.overlayAlphaFrom
-                + (mTransitionSpec.overlayAlphaTo - mTransitionSpec.overlayAlphaFrom) * progress;
-    }
+		private static final Interpolator DEFAULT_INTERPOLATOR = new DecelerateInterpolator();
 
-    private void applyOldTexture(GLView view, GLCanvas canvas, float alpha, float scale, boolean clear) {
-        if (mOldScreenTexture == null)
-            return;
-        if (clear) canvas.clearBuffer(view.getBackgroundColor());
-        canvas.save();
-        canvas.setAlpha(alpha);
-        int xOffset = view.getWidth() / 2;
-        int yOffset = view.getHeight() / 2;
-        canvas.translate(xOffset, yOffset);
-        canvas.scale(scale, scale, 1);
-        mOldScreenTexture.draw(canvas, -xOffset, -yOffset);
-        canvas.restore();
-    }
+		public int duration = 330;
+		public float backgroundAlphaFrom = 0;
+		public float backgroundAlphaTo = 0;
+		public float backgroundScaleFrom = 0;
+		public float backgroundScaleTo = 0;
+		public float contentAlphaFrom = 1;
+		public float contentAlphaTo = 1;
+		public float contentScaleFrom = 1;
+		public float contentScaleTo = 1;
+		public float overlayAlphaFrom = 0;
+		public float overlayAlphaTo = 0;
+		public float overlayScaleFrom = 0;
+		public float overlayScaleTo = 0;
+		public Interpolator interpolator = DEFAULT_INTERPOLATOR;
 
-    public void applyBackground(GLView view, GLCanvas canvas) {
-        if (mCurrentBackgroundAlpha > 0f) {
-            applyOldTexture(view, canvas, mCurrentBackgroundAlpha, mCurrentBackgroundScale, true);
-        }
-    }
+		static {
+			OUTGOING = new Spec();
+			OUTGOING.backgroundAlphaFrom = 0.5f;
+			OUTGOING.backgroundAlphaTo = 0f;
+			OUTGOING.backgroundScaleFrom = 1f;
+			OUTGOING.backgroundScaleTo = 0f;
+			OUTGOING.contentAlphaFrom = 0.5f;
+			OUTGOING.contentAlphaTo = 1f;
+			OUTGOING.contentScaleFrom = 3f;
+			OUTGOING.contentScaleTo = 1f;
 
-    public void applyContentTransform(GLView view, GLCanvas canvas) {
-        int xOffset = view.getWidth() / 2;
-        int yOffset = view.getHeight() / 2;
-        canvas.translate(xOffset, yOffset);
-        canvas.scale(mCurrentContentScale, mCurrentContentScale, 1);
-        canvas.translate(-xOffset, -yOffset);
-        canvas.setAlpha(mCurrentContentAlpha);
-    }
+			INCOMING = new Spec();
+			INCOMING.overlayAlphaFrom = 1f;
+			INCOMING.overlayAlphaTo = 0f;
+			INCOMING.overlayScaleFrom = 1f;
+			INCOMING.overlayScaleTo = 3f;
+			INCOMING.contentAlphaFrom = 0f;
+			INCOMING.contentAlphaTo = 1f;
+			INCOMING.contentScaleFrom = 0.25f;
+			INCOMING.contentScaleTo = 1f;
 
-    public void applyOverlay(GLView view, GLCanvas canvas) {
-        if (mCurrentOverlayAlpha > 0f) {
-            applyOldTexture(view, canvas, mCurrentOverlayAlpha, mCurrentOverlayScale, false);
-        }
-    }
+			PHOTO_INCOMING = INCOMING;
+		}
+
+		private static Spec specForTransition(final Transition t) {
+			switch (t) {
+				case Outgoing:
+					return Spec.OUTGOING;
+				case Incoming:
+					return Spec.INCOMING;
+				case PhotoIncoming:
+					return Spec.PHOTO_INCOMING;
+				case None:
+				default:
+					return null;
+			}
+		}
+	}
+
+	public static enum Transition {
+		None, Outgoing, Incoming, PhotoIncoming
+	}
 }

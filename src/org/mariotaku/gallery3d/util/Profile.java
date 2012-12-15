@@ -16,12 +16,12 @@
 
 package org.mariotaku.gallery3d.util;
 
+import java.util.ArrayList;
+import java.util.Random;
+
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Process;
-
-import java.util.ArrayList;
-import java.util.Random;
 
 // The Profile class is used to collect profiling information for a thread. It
 // samples stack traces for a thread periodically. enable() and disable() is
@@ -32,195 +32,196 @@ import java.util.Random;
 // can be called in onPause() to ensure all profiling is disabled when an
 // activity is paused.
 public class Profile {
-    @SuppressWarnings("unused")
-    private static final String TAG = "Profile";
-    private static final int NS_PER_MS = 1000000;
+	@SuppressWarnings("unused")
+	private static final String TAG = "Profile";
+	private static final int NS_PER_MS = 1000000;
 
-    // This is a watchdog entry for one thread.
-    // For every cycleTime period, we dump the stack of the thread.
-    private static class WatchEntry {
-        Thread thread;
+	// This is a watchdog thread which dumps stacks of other threads
+	// periodically.
+	private static Watchdog sWatchdog = new Watchdog();
 
-        // Both are in milliseconds
-        int cycleTime;
-        int wakeTime;
+	public static void commit() {
+		sWatchdog.commit(Thread.currentThread());
+	}
 
-        boolean isHolding;
-        ArrayList<String[]> holdingStacks = new ArrayList<String[]>();
-    }
+	// Disable profiling for the calling thread.
+	public static void disable() {
+		sWatchdog.removeWatchEntry(Thread.currentThread());
+	}
 
-    // This is a watchdog thread which dumps stacks of other threads periodically.
-    private static Watchdog sWatchdog = new Watchdog();
+	// Disable profiling for all threads.
+	public static void disableAll() {
+		sWatchdog.removeAllWatchEntries();
+	}
 
-    private static class Watchdog {
-        private ArrayList<WatchEntry> mList = new ArrayList<WatchEntry>();
-        private HandlerThread mHandlerThread;
-        private Handler mHandler;
-        private Runnable mProcessRunnable = new Runnable() {
-            @Override
-            public void run() {
-                synchronized (Watchdog.this) {
-                    processList();
-                }
-            }
-        };
-        private Random mRandom = new Random();
-        private ProfileData mProfileData = new ProfileData();
+	public static void drop() {
+		sWatchdog.drop(Thread.currentThread());
+	}
 
-        public Watchdog() {
-            mHandlerThread = new HandlerThread("Watchdog Handler",
-                    Process.THREAD_PRIORITY_FOREGROUND);
-            mHandlerThread.start();
-            mHandler = new Handler(mHandlerThread.getLooper());
-        }
+	// Dump the profiling data to a file.
+	public static void dumpToFile(final String filename) {
+		sWatchdog.dumpToFile(filename);
+	}
 
-        public synchronized void addWatchEntry(Thread thread, int cycleTime) {
-            WatchEntry e = new WatchEntry();
-            e.thread = thread;
-            e.cycleTime = cycleTime;
-            int firstDelay = 1 + mRandom.nextInt(cycleTime);
-            e.wakeTime = (int) (System.nanoTime() / NS_PER_MS) + firstDelay;
-            mList.add(e);
-            processList();
-        }
+	// Enable profiling for the calling thread. Periodically (every
+	// cycleTimeInMs
+	// milliseconds) sample the stack trace of the calling thread.
+	public static void enable(final int cycleTimeInMs) {
+		final Thread t = Thread.currentThread();
+		sWatchdog.addWatchEntry(t, cycleTimeInMs);
+	}
 
-        public synchronized void removeWatchEntry(Thread thread) {
-            for (int i = 0; i < mList.size(); i++) {
-                if (mList.get(i).thread == thread) {
-                    mList.remove(i);
-                    break;
-                }
-            }
-            processList();
-        }
+	// Hold the future samples coming from current thread until commit() or
+	// drop() is called, and those samples are recorded or ignored as a result.
+	// This must called after enable() to be effective.
+	public static void hold() {
+		sWatchdog.hold(Thread.currentThread());
+	}
 
-        public synchronized void removeAllWatchEntries() {
-            mList.clear();
-            processList();
-        }
+	// Reset the collected profiling data.
+	public static void reset() {
+		sWatchdog.reset();
+	}
 
-        private void processList() {
-            mHandler.removeCallbacks(mProcessRunnable);
-            if (mList.size() == 0) return;
+	private static class Watchdog {
+		private final ArrayList<WatchEntry> mList = new ArrayList<WatchEntry>();
+		private final HandlerThread mHandlerThread;
+		private final Handler mHandler;
+		private final Runnable mProcessRunnable = new Runnable() {
+			@Override
+			public void run() {
+				synchronized (Watchdog.this) {
+					processList();
+				}
+			}
+		};
+		private final Random mRandom = new Random();
+		private final ProfileData mProfileData = new ProfileData();
 
-            int currentTime = (int) (System.nanoTime() / NS_PER_MS);
-            int nextWakeTime = 0;
+		public Watchdog() {
+			mHandlerThread = new HandlerThread("Watchdog Handler", Process.THREAD_PRIORITY_FOREGROUND);
+			mHandlerThread.start();
+			mHandler = new Handler(mHandlerThread.getLooper());
+		}
 
-            for (WatchEntry entry : mList) {
-                if (currentTime > entry.wakeTime) {
-                    entry.wakeTime += entry.cycleTime;
-                    Thread thread = entry.thread;
-                    sampleStack(entry);
-                }
+		public synchronized void addWatchEntry(final Thread thread, final int cycleTime) {
+			final WatchEntry e = new WatchEntry();
+			e.thread = thread;
+			e.cycleTime = cycleTime;
+			final int firstDelay = 1 + mRandom.nextInt(cycleTime);
+			e.wakeTime = (int) (System.nanoTime() / NS_PER_MS) + firstDelay;
+			mList.add(e);
+			processList();
+		}
 
-                if (entry.wakeTime > nextWakeTime) {
-                    nextWakeTime = entry.wakeTime;
-                }
-            }
+		public synchronized void commit(final Thread t) {
+			final WatchEntry entry = findEntry(t);
+			if (entry == null) return;
+			final ArrayList<String[]> stacks = entry.holdingStacks;
+			for (int i = 0; i < stacks.size(); i++) {
+				mProfileData.addSample(stacks.get(i));
+			}
+			entry.isHolding = false;
+			entry.holdingStacks.clear();
+		}
 
-            long delay = nextWakeTime - currentTime;
-            mHandler.postDelayed(mProcessRunnable, delay);
-        }
+		public synchronized void drop(final Thread t) {
+			final WatchEntry entry = findEntry(t);
+			if (entry == null) return;
+			entry.isHolding = false;
+			entry.holdingStacks.clear();
+		}
 
-        private void sampleStack(WatchEntry entry) {
-            Thread thread = entry.thread;
-            StackTraceElement[] stack = thread.getStackTrace();
-            String[] lines = new String[stack.length];
-            for (int i = 0; i < stack.length; i++) {
-                lines[i] = stack[i].toString();
-            }
-            if (entry.isHolding) {
-                entry.holdingStacks.add(lines);
-            } else {
-                mProfileData.addSample(lines);
-            }
-        }
+		public synchronized void dumpToFile(final String filename) {
+			mProfileData.dumpToFile(filename);
+		}
 
-        private WatchEntry findEntry(Thread thread) {
-            for (int i = 0; i < mList.size(); i++) {
-                WatchEntry entry = mList.get(i);
-                if (entry.thread == thread) return entry;
-            }
-            return null;
-        }
+		public synchronized void hold(final Thread t) {
+			final WatchEntry entry = findEntry(t);
 
-        public synchronized void dumpToFile(String filename) {
-            mProfileData.dumpToFile(filename);
-        }
+			// This can happen if the profiling is disabled (probably from
+			// another thread). Same check is applied in commit() and drop()
+			// below.
+			if (entry == null) return;
 
-        public synchronized void reset() {
-            mProfileData.reset();
-        }
+			entry.isHolding = true;
+		}
 
-        public synchronized void hold(Thread t) {
-            WatchEntry entry = findEntry(t);
+		public synchronized void removeAllWatchEntries() {
+			mList.clear();
+			processList();
+		}
 
-            // This can happen if the profiling is disabled (probably from
-            // another thread). Same check is applied in commit() and drop()
-            // below.
-            if (entry == null) return;
+		public synchronized void removeWatchEntry(final Thread thread) {
+			for (int i = 0; i < mList.size(); i++) {
+				if (mList.get(i).thread == thread) {
+					mList.remove(i);
+					break;
+				}
+			}
+			processList();
+		}
 
-            entry.isHolding = true;
-        }
+		public synchronized void reset() {
+			mProfileData.reset();
+		}
 
-        public synchronized void commit(Thread t) {
-            WatchEntry entry = findEntry(t);
-            if (entry == null) return;
-            ArrayList<String[]> stacks = entry.holdingStacks;
-            for (int i = 0; i < stacks.size(); i++) {
-                mProfileData.addSample(stacks.get(i));
-            }
-            entry.isHolding = false;
-            entry.holdingStacks.clear();
-        }
+		private WatchEntry findEntry(final Thread thread) {
+			for (int i = 0; i < mList.size(); i++) {
+				final WatchEntry entry = mList.get(i);
+				if (entry.thread == thread) return entry;
+			}
+			return null;
+		}
 
-        public synchronized void drop(Thread t) {
-            WatchEntry entry = findEntry(t);
-            if (entry == null) return;
-            entry.isHolding = false;
-            entry.holdingStacks.clear();
-        }
-    }
+		private void processList() {
+			mHandler.removeCallbacks(mProcessRunnable);
+			if (mList.size() == 0) return;
 
-    // Enable profiling for the calling thread. Periodically (every cycleTimeInMs
-    // milliseconds) sample the stack trace of the calling thread.
-    public static void enable(int cycleTimeInMs) {
-        Thread t = Thread.currentThread();
-        sWatchdog.addWatchEntry(t, cycleTimeInMs);
-    }
+			final int currentTime = (int) (System.nanoTime() / NS_PER_MS);
+			int nextWakeTime = 0;
 
-    // Disable profiling for the calling thread.
-    public static void disable() {
-        sWatchdog.removeWatchEntry(Thread.currentThread());
-    }
+			for (final WatchEntry entry : mList) {
+				if (currentTime > entry.wakeTime) {
+					entry.wakeTime += entry.cycleTime;
+					final Thread thread = entry.thread;
+					sampleStack(entry);
+				}
 
-    // Disable profiling for all threads.
-    public static void disableAll() {
-        sWatchdog.removeAllWatchEntries();
-    }
+				if (entry.wakeTime > nextWakeTime) {
+					nextWakeTime = entry.wakeTime;
+				}
+			}
 
-    // Dump the profiling data to a file.
-    public static void dumpToFile(String filename) {
-        sWatchdog.dumpToFile(filename);
-    }
+			final long delay = nextWakeTime - currentTime;
+			mHandler.postDelayed(mProcessRunnable, delay);
+		}
 
-    // Reset the collected profiling data.
-    public static void reset() {
-        sWatchdog.reset();
-    }
+		private void sampleStack(final WatchEntry entry) {
+			final Thread thread = entry.thread;
+			final StackTraceElement[] stack = thread.getStackTrace();
+			final String[] lines = new String[stack.length];
+			for (int i = 0; i < stack.length; i++) {
+				lines[i] = stack[i].toString();
+			}
+			if (entry.isHolding) {
+				entry.holdingStacks.add(lines);
+			} else {
+				mProfileData.addSample(lines);
+			}
+		}
+	}
 
-    // Hold the future samples coming from current thread until commit() or
-    // drop() is called, and those samples are recorded or ignored as a result.
-    // This must called after enable() to be effective.
-    public static void hold() {
-        sWatchdog.hold(Thread.currentThread());
-    }
+	// This is a watchdog entry for one thread.
+	// For every cycleTime period, we dump the stack of the thread.
+	private static class WatchEntry {
+		Thread thread;
 
-    public static void commit() {
-        sWatchdog.commit(Thread.currentThread());
-    }
+		// Both are in milliseconds
+		int cycleTime;
+		int wakeTime;
 
-    public static void drop() {
-        sWatchdog.drop(Thread.currentThread());
-    }
+		boolean isHolding;
+		ArrayList<String[]> holdingStacks = new ArrayList<String[]>();
+	}
 }

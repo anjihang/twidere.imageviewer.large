@@ -16,6 +16,16 @@
 
 package org.mariotaku.gallery3d.data;
 
+import java.io.FileDescriptor;
+import java.io.FileInputStream;
+import java.io.InputStream;
+
+import org.mariotaku.gallery3d.common.ApiHelper;
+import org.mariotaku.gallery3d.common.BitmapUtils;
+import org.mariotaku.gallery3d.common.Utils;
+import org.mariotaku.gallery3d.util.ThreadPool.CancelListener;
+import org.mariotaku.gallery3d.util.ThreadPool.JobContext;
+
 import android.annotation.TargetApi;
 import android.graphics.Bitmap;
 import android.graphics.Bitmap.Config;
@@ -24,298 +34,293 @@ import android.graphics.BitmapFactory.Options;
 import android.graphics.BitmapRegionDecoder;
 import android.os.Build;
 import android.util.FloatMath;
-
-import org.mariotaku.gallery3d.common.ApiHelper;
-import org.mariotaku.gallery3d.common.BitmapUtils;
-import org.mariotaku.gallery3d.common.Utils;
-import org.mariotaku.gallery3d.ui.Log;
-import org.mariotaku.gallery3d.util.ThreadPool.CancelListener;
-import org.mariotaku.gallery3d.util.ThreadPool.JobContext;
-
-import java.io.FileDescriptor;
-import java.io.FileInputStream;
-import java.io.InputStream;
+import android.util.Log;
 
 public class DecodeUtils {
-    private static final String TAG = "DecodeUtils";
+	private static final String TAG = "DecodeUtils";
 
-    private static class DecodeCanceller implements CancelListener {
-        Options mOptions;
+	public static BitmapRegionDecoder createBitmapRegionDecoder(final JobContext jc, final byte[] bytes,
+			final int offset, final int length, final boolean shareable) {
+		if (offset < 0 || length <= 0 || offset + length > bytes.length)
+			throw new IllegalArgumentException(String.format("offset = %s, length = %s, bytes = %s", offset, length,
+					bytes.length));
 
-        public DecodeCanceller(Options options) {
-            mOptions = options;
-        }
+		try {
+			return BitmapRegionDecoder.newInstance(bytes, offset, length, shareable);
+		} catch (final Throwable t) {
+			Log.w(TAG, t);
+			return null;
+		}
+	}
 
-        @Override
-        public void onCancel() {
-            mOptions.requestCancelDecode();
-        }
-    }
+	public static BitmapRegionDecoder createBitmapRegionDecoder(final JobContext jc, final FileDescriptor fd,
+			final boolean shareable) {
+		try {
+			return BitmapRegionDecoder.newInstance(fd, shareable);
+		} catch (final Throwable t) {
+			Log.w(TAG, t);
+			return null;
+		}
+	}
 
-    @TargetApi(ApiHelper.VERSION_CODES.HONEYCOMB)
-    public static void setOptionsMutable(Options options) {
-        if (ApiHelper.HAS_OPTIONS_IN_MUTABLE) options.inMutable = true;
-    }
+	public static BitmapRegionDecoder createBitmapRegionDecoder(final JobContext jc, final InputStream is,
+			final boolean shareable) {
+		try {
+			return BitmapRegionDecoder.newInstance(is, shareable);
+		} catch (final Throwable t) {
+			// We often cancel the creating of bitmap region decoder,
+			// so just log one line.
+			Log.w(TAG, "requestCreateBitmapRegionDecoder: " + t);
+			return null;
+		}
+	}
 
-    public static Bitmap decode(JobContext jc, FileDescriptor fd, Options options) {
-        if (options == null) options = new Options();
-        jc.setCancelListener(new DecodeCanceller(options));
-        setOptionsMutable(options);
-        return ensureGLCompatibleBitmap(
-                BitmapFactory.decodeFileDescriptor(fd, null, options));
-    }
+	public static BitmapRegionDecoder createBitmapRegionDecoder(final JobContext jc, final String filePath,
+			final boolean shareable) {
+		try {
+			return BitmapRegionDecoder.newInstance(filePath, shareable);
+		} catch (final Throwable t) {
+			Log.w(TAG, t);
+			return null;
+		}
+	}
 
-    public static void decodeBounds(JobContext jc, FileDescriptor fd,
-            Options options) {
-        Utils.assertTrue(options != null);
-        options.inJustDecodeBounds = true;
-        jc.setCancelListener(new DecodeCanceller(options));
-        BitmapFactory.decodeFileDescriptor(fd, null, options);
-        options.inJustDecodeBounds = false;
-    }
+	@TargetApi(Build.VERSION_CODES.HONEYCOMB)
+	public static Bitmap decode(final JobContext jc, final byte[] data, final int offset, final int length,
+			BitmapFactory.Options options, final BitmapPool pool) {
+		if (pool == null) return decode(jc, data, offset, length, options);
 
-    public static Bitmap decode(JobContext jc, byte[] bytes, Options options) {
-        return decode(jc, bytes, 0, bytes.length, options);
-    }
+		if (options == null) {
+			options = new BitmapFactory.Options();
+		}
+		if (options.inSampleSize < 1) {
+			options.inSampleSize = 1;
+		}
+		options.inPreferredConfig = Bitmap.Config.ARGB_8888;
+		options.inBitmap = options.inSampleSize == 1 ? findCachedBitmap(pool, jc, data, offset, length, options) : null;
+		try {
+			final Bitmap bitmap = decode(jc, data, offset, length, options);
+			if (options.inBitmap != null && options.inBitmap != bitmap) {
+				pool.recycle(options.inBitmap);
+				options.inBitmap = null;
+			}
+			return bitmap;
+		} catch (final IllegalArgumentException e) {
+			if (options.inBitmap == null) throw e;
 
-    public static Bitmap decode(JobContext jc, byte[] bytes, int offset,
-            int length, Options options) {
-        if (options == null) options = new Options();
-        jc.setCancelListener(new DecodeCanceller(options));
-        setOptionsMutable(options);
-        return ensureGLCompatibleBitmap(
-                BitmapFactory.decodeByteArray(bytes, offset, length, options));
-    }
+			Log.w(TAG, "decode fail with a given bitmap, try decode to a new bitmap");
+			pool.recycle(options.inBitmap);
+			options.inBitmap = null;
+			return decode(jc, data, offset, length, options);
+		}
+	}
 
-    public static void decodeBounds(JobContext jc, byte[] bytes, int offset,
-            int length, Options options) {
-        Utils.assertTrue(options != null);
-        options.inJustDecodeBounds = true;
-        jc.setCancelListener(new DecodeCanceller(options));
-        BitmapFactory.decodeByteArray(bytes, offset, length, options);
-        options.inJustDecodeBounds = false;
-    }
+	public static Bitmap decode(final JobContext jc, final byte[] bytes, final int offset, final int length,
+			Options options) {
+		if (options == null) {
+			options = new Options();
+		}
+		jc.setCancelListener(new DecodeCanceller(options));
+		setOptionsMutable(options);
+		return ensureGLCompatibleBitmap(BitmapFactory.decodeByteArray(bytes, offset, length, options));
+	}
 
-    public static Bitmap decodeThumbnail(
-            JobContext jc, String filePath, Options options, int targetSize, int type) {
-        FileInputStream fis = null;
-        try {
-            fis = new FileInputStream(filePath);
-            FileDescriptor fd = fis.getFD();
-            return decodeThumbnail(jc, fd, options, targetSize, type);
-        } catch (Exception ex) {
-            Log.w(TAG, ex);
-            return null;
-        } finally {
-            Utils.closeSilently(fis);
-        }
-    }
+	public static Bitmap decode(final JobContext jc, final byte[] bytes, final Options options) {
+		return decode(jc, bytes, 0, bytes.length, options);
+	}
 
-    public static Bitmap decodeThumbnail(
-            JobContext jc, FileDescriptor fd, Options options, int targetSize, int type) {
-        if (options == null) options = new Options();
-        jc.setCancelListener(new DecodeCanceller(options));
+	public static Bitmap decode(final JobContext jc, final FileDescriptor fd, Options options) {
+		if (options == null) {
+			options = new Options();
+		}
+		jc.setCancelListener(new DecodeCanceller(options));
+		setOptionsMutable(options);
+		return ensureGLCompatibleBitmap(BitmapFactory.decodeFileDescriptor(fd, null, options));
+	}
 
-        options.inJustDecodeBounds = true;
-        BitmapFactory.decodeFileDescriptor(fd, null, options);
-        if (jc.isCancelled()) return null;
+	// This is the same as the method above except the source data comes
+	// from a file descriptor instead of a byte array.
+	@TargetApi(Build.VERSION_CODES.HONEYCOMB)
+	public static Bitmap decode(final JobContext jc, final FileDescriptor fileDescriptor, Options options,
+			final BitmapPool pool) {
+		if (pool == null) return decode(jc, fileDescriptor, options);
 
-        int w = options.outWidth;
-        int h = options.outHeight;
+		if (options == null) {
+			options = new BitmapFactory.Options();
+		}
+		if (options.inSampleSize < 1) {
+			options.inSampleSize = 1;
+		}
+		options.inPreferredConfig = Bitmap.Config.ARGB_8888;
+		options.inBitmap = options.inSampleSize == 1 ? findCachedBitmap(pool, jc, fileDescriptor, options) : null;
+		try {
+			final Bitmap bitmap = DecodeUtils.decode(jc, fileDescriptor, options);
+			if (options.inBitmap != null && options.inBitmap != bitmap) {
+				pool.recycle(options.inBitmap);
+				options.inBitmap = null;
+			}
+			return bitmap;
+		} catch (final IllegalArgumentException e) {
+			if (options.inBitmap == null) throw e;
 
-        if (type == MediaItem.TYPE_MICROTHUMBNAIL) {
-            // We center-crop the original image as it's micro thumbnail. In this case,
-            // we want to make sure the shorter side >= "targetSize".
-            float scale = (float) targetSize / Math.min(w, h);
-            options.inSampleSize = BitmapUtils.computeSampleSizeLarger(scale);
+			Log.w(TAG, "decode fail with a given bitmap, try decode to a new bitmap");
+			pool.recycle(options.inBitmap);
+			options.inBitmap = null;
+			return decode(jc, fileDescriptor, options);
+		}
+	}
 
-            // For an extremely wide image, e.g. 300x30000, we may got OOM when decoding
-            // it for TYPE_MICROTHUMBNAIL. So we add a max number of pixels limit here.
-            final int MAX_PIXEL_COUNT = 640000; // 400 x 1600
-            if ((w / options.inSampleSize) * (h / options.inSampleSize) > MAX_PIXEL_COUNT) {
-                options.inSampleSize = BitmapUtils.computeSampleSize(
-                        FloatMath.sqrt((float) MAX_PIXEL_COUNT / (w * h)));
-            }
-        } else {
-            // For screen nail, we only want to keep the longer side >= targetSize.
-            float scale = (float) targetSize / Math.max(w, h);
-            options.inSampleSize = BitmapUtils.computeSampleSizeLarger(scale);
-        }
+	public static void decodeBounds(final JobContext jc, final byte[] bytes, final int offset, final int length,
+			final Options options) {
+		Utils.assertTrue(options != null);
+		options.inJustDecodeBounds = true;
+		jc.setCancelListener(new DecodeCanceller(options));
+		BitmapFactory.decodeByteArray(bytes, offset, length, options);
+		options.inJustDecodeBounds = false;
+	}
 
-        options.inJustDecodeBounds = false;
-        setOptionsMutable(options);
+	public static void decodeBounds(final JobContext jc, final FileDescriptor fd, final Options options) {
+		Utils.assertTrue(options != null);
+		options.inJustDecodeBounds = true;
+		jc.setCancelListener(new DecodeCanceller(options));
+		BitmapFactory.decodeFileDescriptor(fd, null, options);
+		options.inJustDecodeBounds = false;
+	}
 
-        Bitmap result = BitmapFactory.decodeFileDescriptor(fd, null, options);
-        if (result == null) return null;
+	/**
+	 * Decodes the bitmap from the given byte array if the image size is larger
+	 * than the given requirement.
+	 * 
+	 * Note: The returned image may be resized down. However, both width and
+	 * height must be larger than the <code>targetSize</code>.
+	 */
+	public static Bitmap decodeIfBigEnough(final JobContext jc, final byte[] data, Options options, final int targetSize) {
+		if (options == null) {
+			options = new Options();
+		}
+		jc.setCancelListener(new DecodeCanceller(options));
 
-        // We need to resize down if the decoder does not support inSampleSize
-        // (For example, GIF images)
-        float scale = (float) targetSize / (type == MediaItem.TYPE_MICROTHUMBNAIL
-                ? Math.min(result.getWidth(), result.getHeight())
-                : Math.max(result.getWidth(), result.getHeight()));
+		options.inJustDecodeBounds = true;
+		BitmapFactory.decodeByteArray(data, 0, data.length, options);
+		if (jc.isCancelled()) return null;
+		if (options.outWidth < targetSize || options.outHeight < targetSize) return null;
+		options.inSampleSize = BitmapUtils.computeSampleSizeLarger(options.outWidth, options.outHeight, targetSize);
+		options.inJustDecodeBounds = false;
+		setOptionsMutable(options);
 
-        if (scale <= 0.5) result = BitmapUtils.resizeBitmapByScale(result, scale, true);
-        return ensureGLCompatibleBitmap(result);
-    }
+		return ensureGLCompatibleBitmap(BitmapFactory.decodeByteArray(data, 0, data.length, options));
+	}
 
-    /**
-     * Decodes the bitmap from the given byte array if the image size is larger than the given
-     * requirement.
-     *
-     * Note: The returned image may be resized down. However, both width and height must be
-     * larger than the <code>targetSize</code>.
-     */
-    public static Bitmap decodeIfBigEnough(JobContext jc, byte[] data,
-            Options options, int targetSize) {
-        if (options == null) options = new Options();
-        jc.setCancelListener(new DecodeCanceller(options));
+	public static Bitmap decodeThumbnail(final JobContext jc, final FileDescriptor fd, Options options,
+			final int targetSize, final int type) {
+		if (options == null) {
+			options = new Options();
+		}
+		jc.setCancelListener(new DecodeCanceller(options));
 
-        options.inJustDecodeBounds = true;
-        BitmapFactory.decodeByteArray(data, 0, data.length, options);
-        if (jc.isCancelled()) return null;
-        if (options.outWidth < targetSize || options.outHeight < targetSize) {
-            return null;
-        }
-        options.inSampleSize = BitmapUtils.computeSampleSizeLarger(
-                options.outWidth, options.outHeight, targetSize);
-        options.inJustDecodeBounds = false;
-        setOptionsMutable(options);
+		options.inJustDecodeBounds = true;
+		BitmapFactory.decodeFileDescriptor(fd, null, options);
+		if (jc.isCancelled()) return null;
 
-        return ensureGLCompatibleBitmap(
-                BitmapFactory.decodeByteArray(data, 0, data.length, options));
-    }
+		final int w = options.outWidth;
+		final int h = options.outHeight;
 
-    // TODO: This function should not be called directly from
-    // DecodeUtils.requestDecode(...), since we don't have the knowledge
-    // if the bitmap will be uploaded to GL.
-    public static Bitmap ensureGLCompatibleBitmap(Bitmap bitmap) {
-        if (bitmap == null || bitmap.getConfig() != null) return bitmap;
-        Bitmap newBitmap = bitmap.copy(Config.ARGB_8888, false);
-        bitmap.recycle();
-        return newBitmap;
-    }
+		if (type == MediaItem.TYPE_MICROTHUMBNAIL) {
+			// We center-crop the original image as it's micro thumbnail. In
+			// this case,
+			// we want to make sure the shorter side >= "targetSize".
+			final float scale = (float) targetSize / Math.min(w, h);
+			options.inSampleSize = BitmapUtils.computeSampleSizeLarger(scale);
 
-    public static BitmapRegionDecoder createBitmapRegionDecoder(
-            JobContext jc, byte[] bytes, int offset, int length,
-            boolean shareable) {
-        if (offset < 0 || length <= 0 || offset + length > bytes.length) {
-            throw new IllegalArgumentException(String.format(
-                    "offset = %s, length = %s, bytes = %s",
-                    offset, length, bytes.length));
-        }
+			// For an extremely wide image, e.g. 300x30000, we may got OOM when
+			// decoding
+			// it for TYPE_MICROTHUMBNAIL. So we add a max number of pixels
+			// limit here.
+			final int MAX_PIXEL_COUNT = 640000; // 400 x 1600
+			if (w / options.inSampleSize * (h / options.inSampleSize) > MAX_PIXEL_COUNT) {
+				options.inSampleSize = BitmapUtils.computeSampleSize(FloatMath.sqrt((float) MAX_PIXEL_COUNT / (w * h)));
+			}
+		} else {
+			// For screen nail, we only want to keep the longer side >=
+			// targetSize.
+			final float scale = (float) targetSize / Math.max(w, h);
+			options.inSampleSize = BitmapUtils.computeSampleSizeLarger(scale);
+		}
 
-        try {
-            return BitmapRegionDecoder.newInstance(
-                    bytes, offset, length, shareable);
-        } catch (Throwable t)  {
-            Log.w(TAG, t);
-            return null;
-        }
-    }
+		options.inJustDecodeBounds = false;
+		setOptionsMutable(options);
 
-    public static BitmapRegionDecoder createBitmapRegionDecoder(
-            JobContext jc, String filePath, boolean shareable) {
-        try {
-            return BitmapRegionDecoder.newInstance(filePath, shareable);
-        } catch (Throwable t)  {
-            Log.w(TAG, t);
-            return null;
-        }
-    }
+		Bitmap result = BitmapFactory.decodeFileDescriptor(fd, null, options);
+		if (result == null) return null;
 
-    public static BitmapRegionDecoder createBitmapRegionDecoder(
-            JobContext jc, FileDescriptor fd, boolean shareable) {
-        try {
-            return BitmapRegionDecoder.newInstance(fd, shareable);
-        } catch (Throwable t)  {
-            Log.w(TAG, t);
-            return null;
-        }
-    }
+		// We need to resize down if the decoder does not support inSampleSize
+		// (For example, GIF images)
+		final float scale = (float) targetSize
+				/ (type == MediaItem.TYPE_MICROTHUMBNAIL ? Math.min(result.getWidth(), result.getHeight()) : Math.max(
+						result.getWidth(), result.getHeight()));
 
-    public static BitmapRegionDecoder createBitmapRegionDecoder(
-            JobContext jc, InputStream is, boolean shareable) {
-        try {
-            return BitmapRegionDecoder.newInstance(is, shareable);
-        } catch (Throwable t)  {
-            // We often cancel the creating of bitmap region decoder,
-            // so just log one line.
-            Log.w(TAG, "requestCreateBitmapRegionDecoder: " + t);
-            return null;
-        }
-    }
+		if (scale <= 0.5) {
+			result = BitmapUtils.resizeBitmapByScale(result, scale, true);
+		}
+		return ensureGLCompatibleBitmap(result);
+	}
 
-    @TargetApi(Build.VERSION_CODES.HONEYCOMB)
-    public static Bitmap decode(JobContext jc, byte[] data, int offset,
-            int length, BitmapFactory.Options options, BitmapPool pool) {
-        if (pool == null) {
-            return decode(jc, data, offset, length, options);
-        }
+	public static Bitmap decodeThumbnail(final JobContext jc, final String filePath, final Options options,
+			final int targetSize, final int type) {
+		FileInputStream fis = null;
+		try {
+			fis = new FileInputStream(filePath);
+			final FileDescriptor fd = fis.getFD();
+			return decodeThumbnail(jc, fd, options, targetSize, type);
+		} catch (final Exception ex) {
+			Log.w(TAG, ex);
+			return null;
+		} finally {
+			Utils.closeSilently(fis);
+		}
+	}
 
-        if (options == null) options = new BitmapFactory.Options();
-        if (options.inSampleSize < 1) options.inSampleSize = 1;
-        options.inPreferredConfig = Bitmap.Config.ARGB_8888;
-        options.inBitmap = (options.inSampleSize == 1)
-                ? findCachedBitmap(pool, jc, data, offset, length, options) : null;
-        try {
-            Bitmap bitmap = decode(jc, data, offset, length, options);
-            if (options.inBitmap != null && options.inBitmap != bitmap) {
-                pool.recycle(options.inBitmap);
-                options.inBitmap = null;
-            }
-            return bitmap;
-        } catch (IllegalArgumentException e) {
-            if (options.inBitmap == null) throw e;
+	// TODO: This function should not be called directly from
+	// DecodeUtils.requestDecode(...), since we don't have the knowledge
+	// if the bitmap will be uploaded to GL.
+	public static Bitmap ensureGLCompatibleBitmap(final Bitmap bitmap) {
+		if (bitmap == null || bitmap.getConfig() != null) return bitmap;
+		final Bitmap newBitmap = bitmap.copy(Config.ARGB_8888, false);
+		bitmap.recycle();
+		return newBitmap;
+	}
 
-            Log.w(TAG, "decode fail with a given bitmap, try decode to a new bitmap");
-            pool.recycle(options.inBitmap);
-            options.inBitmap = null;
-            return decode(jc, data, offset, length, options);
-        }
-    }
+	@TargetApi(ApiHelper.VERSION_CODES.HONEYCOMB)
+	public static void setOptionsMutable(final Options options) {
+		if (ApiHelper.HAS_OPTIONS_IN_MUTABLE) {
+			options.inMutable = true;
+		}
+	}
 
-    // This is the same as the method above except the source data comes
-    // from a file descriptor instead of a byte array.
-    @TargetApi(Build.VERSION_CODES.HONEYCOMB)
-    public static Bitmap decode(JobContext jc,
-            FileDescriptor fileDescriptor, Options options, BitmapPool pool) {
-        if (pool == null) {
-            return decode(jc, fileDescriptor, options);
-        }
+	private static Bitmap findCachedBitmap(final BitmapPool pool, final JobContext jc, final byte[] data,
+			final int offset, final int length, final Options options) {
+		if (pool.isOneSize()) return pool.getBitmap();
+		decodeBounds(jc, data, offset, length, options);
+		return pool.getBitmap(options.outWidth, options.outHeight);
+	}
 
-        if (options == null) options = new BitmapFactory.Options();
-        if (options.inSampleSize < 1) options.inSampleSize = 1;
-        options.inPreferredConfig = Bitmap.Config.ARGB_8888;
-        options.inBitmap = (options.inSampleSize == 1)
-                ? findCachedBitmap(pool, jc, fileDescriptor, options) : null;
-        try {
-            Bitmap bitmap = DecodeUtils.decode(jc, fileDescriptor, options);
-            if (options.inBitmap != null && options.inBitmap != bitmap) {
-                pool.recycle(options.inBitmap);
-                options.inBitmap = null;
-            }
-            return bitmap;
-        } catch (IllegalArgumentException e) {
-            if (options.inBitmap == null) throw e;
+	private static Bitmap findCachedBitmap(final BitmapPool pool, final JobContext jc,
+			final FileDescriptor fileDescriptor, final Options options) {
+		if (pool.isOneSize()) return pool.getBitmap();
+		decodeBounds(jc, fileDescriptor, options);
+		return pool.getBitmap(options.outWidth, options.outHeight);
+	}
 
-            Log.w(TAG, "decode fail with a given bitmap, try decode to a new bitmap");
-            pool.recycle(options.inBitmap);
-            options.inBitmap = null;
-            return decode(jc, fileDescriptor, options);
-        }
-    }
+	private static class DecodeCanceller implements CancelListener {
+		Options mOptions;
 
-    private static Bitmap findCachedBitmap(BitmapPool pool, JobContext jc,
-            byte[] data, int offset, int length, Options options) {
-        if (pool.isOneSize()) return pool.getBitmap();
-        decodeBounds(jc, data, offset, length, options);
-        return pool.getBitmap(options.outWidth, options.outHeight);
-    }
+		public DecodeCanceller(final Options options) {
+			mOptions = options;
+		}
 
-    private static Bitmap findCachedBitmap(BitmapPool pool, JobContext jc,
-            FileDescriptor fileDescriptor, Options options) {
-        if (pool.isOneSize()) return pool.getBitmap();
-        decodeBounds(jc, fileDescriptor, options);
-        return pool.getBitmap(options.outWidth, options.outHeight);
-    }
+		@Override
+		public void onCancel() {
+			mOptions.requestCancelDecode();
+		}
+	}
 }

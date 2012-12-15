@@ -16,25 +16,25 @@
 
 package org.mariotaku.gallery3d.data;
 
-import android.content.Context;
-import android.net.Uri;
-
 import org.mariotaku.gallery3d.util.LightCycleHelper;
 import org.mariotaku.gallery3d.util.LightCycleHelper.PanoramaMetadata;
 import org.mariotaku.gallery3d.util.ThreadPool.Job;
 import org.mariotaku.gallery3d.util.ThreadPool.JobContext;
 
+import android.content.Context;
+import android.net.Uri;
+
 public class PanoramaMetadataJob implements Job<PanoramaMetadata> {
-    Context mContext;
-    Uri mUri;
+	Context mContext;
+	Uri mUri;
 
-    public PanoramaMetadataJob(Context context, Uri uri) {
-        mContext = context;
-        mUri = uri;
-    }
+	public PanoramaMetadataJob(final Context context, final Uri uri) {
+		mContext = context;
+		mUri = uri;
+	}
 
-    @Override
-    public PanoramaMetadata run(JobContext jc) {
-        return LightCycleHelper.getPanoramaMetadata(mContext, mUri);
-    }
+	@Override
+	public PanoramaMetadata run(final JobContext jc) {
+		return LightCycleHelper.getPanoramaMetadata(mContext, mUri);
+	}
 }

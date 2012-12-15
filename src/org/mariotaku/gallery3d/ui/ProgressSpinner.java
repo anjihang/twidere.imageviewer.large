@@ -16,63 +16,69 @@
 
 package org.mariotaku.gallery3d.ui;
 
-import android.content.Context;
-
 import org.mariotaku.gallery3d.R;
 
+import android.content.Context;
+
 public class ProgressSpinner {
-    private static float ROTATE_SPEED_OUTER = 1080f / 3500f;
-    private static float ROTATE_SPEED_INNER = -720f / 3500f;
-    private final ResourceTexture mOuter;
-    private final ResourceTexture mInner;
-    private final int mWidth;
-    private final int mHeight;
+	private static float ROTATE_SPEED_OUTER = 1080f / 3500f;
+	private static float ROTATE_SPEED_INNER = -720f / 3500f;
+	private final ResourceTexture mOuter;
+	private final ResourceTexture mInner;
+	private final int mWidth;
+	private final int mHeight;
 
-    private float mInnerDegree = 0f;
-    private float mOuterDegree = 0f;
-    private long mAnimationTimestamp = -1;
+	private float mInnerDegree = 0f;
+	private float mOuterDegree = 0f;
+	private long mAnimationTimestamp = -1;
 
-    public ProgressSpinner(Context context) {
-        mOuter = new ResourceTexture(context, R.drawable.spinner_76_outer_holo);
-        mInner = new ResourceTexture(context, R.drawable.spinner_76_inner_holo);
+	public ProgressSpinner(final Context context) {
+		mOuter = new ResourceTexture(context, R.drawable.spinner_76_outer_holo);
+		mInner = new ResourceTexture(context, R.drawable.spinner_76_inner_holo);
 
-        mWidth = Math.max(mOuter.getWidth(), mInner.getWidth());
-        mHeight = Math.max(mOuter.getHeight(), mInner.getHeight());
-    }
+		mWidth = Math.max(mOuter.getWidth(), mInner.getWidth());
+		mHeight = Math.max(mOuter.getHeight(), mInner.getHeight());
+	}
 
-    public int getWidth() {
-        return mWidth;
-    }
+	public void draw(final GLCanvas canvas, final int x, final int y) {
+		final long now = AnimationTime.get();
+		if (mAnimationTimestamp == -1) {
+			mAnimationTimestamp = now;
+		}
+		mOuterDegree += (now - mAnimationTimestamp) * ROTATE_SPEED_OUTER;
+		mInnerDegree += (now - mAnimationTimestamp) * ROTATE_SPEED_INNER;
 
-    public int getHeight() {
-        return mHeight;
-    }
+		mAnimationTimestamp = now;
 
-    public void startAnimation() {
-        mAnimationTimestamp = -1;
-        mOuterDegree = 0;
-        mInnerDegree = 0;
-    }
+		// just preventing overflow
+		if (mOuterDegree > 360) {
+			mOuterDegree -= 360f;
+		}
+		if (mInnerDegree < 0) {
+			mInnerDegree += 360f;
+		}
 
-    public void draw(GLCanvas canvas, int x, int y) {
-        long now = AnimationTime.get();
-        if (mAnimationTimestamp == -1) mAnimationTimestamp = now;
-        mOuterDegree += (now - mAnimationTimestamp) * ROTATE_SPEED_OUTER;
-        mInnerDegree += (now - mAnimationTimestamp) * ROTATE_SPEED_INNER;
+		canvas.save(GLCanvas.SAVE_FLAG_MATRIX);
 
-        mAnimationTimestamp = now;
+		canvas.translate(x + mWidth / 2, y + mHeight / 2);
+		canvas.rotate(mInnerDegree, 0, 0, 1);
+		mOuter.draw(canvas, -mOuter.getWidth() / 2, -mOuter.getHeight() / 2);
+		canvas.rotate(mOuterDegree - mInnerDegree, 0, 0, 1);
+		mInner.draw(canvas, -mInner.getWidth() / 2, -mInner.getHeight() / 2);
+		canvas.restore();
+	}
 
-        // just preventing overflow
-        if (mOuterDegree > 360) mOuterDegree -= 360f;
-        if (mInnerDegree < 0) mInnerDegree += 360f;
+	public int getHeight() {
+		return mHeight;
+	}
 
-        canvas.save(GLCanvas.SAVE_FLAG_MATRIX);
+	public int getWidth() {
+		return mWidth;
+	}
 
-        canvas.translate(x + mWidth / 2, y + mHeight / 2);
-        canvas.rotate(mInnerDegree, 0, 0, 1);
-        mOuter.draw(canvas, -mOuter.getWidth() / 2, -mOuter.getHeight() / 2);
-        canvas.rotate(mOuterDegree - mInnerDegree, 0, 0, 1);
-        mInner.draw(canvas, -mInner.getWidth() / 2, -mInner.getHeight() / 2);
-        canvas.restore();
-    }
+	public void startAnimation() {
+		mAnimationTimestamp = -1;
+		mOuterDegree = 0;
+		mInnerDegree = 0;
+	}
 }

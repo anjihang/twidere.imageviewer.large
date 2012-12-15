@@ -24,55 +24,52 @@ import java.util.Set;
 
 public class IdentityCache<K, V> {
 
-    private final HashMap<K, Entry<K, V>> mWeakMap =
-            new HashMap<K, Entry<K, V>>();
-    private ReferenceQueue<V> mQueue = new ReferenceQueue<V>();
+	private final HashMap<K, Entry<K, V>> mWeakMap = new HashMap<K, Entry<K, V>>();
+	private final ReferenceQueue<V> mQueue = new ReferenceQueue<V>();
 
-    public IdentityCache() {
-    }
+	public IdentityCache() {
+	}
 
-    private static class Entry<K, V> extends WeakReference<V> {
-        K mKey;
+	public synchronized V get(final K key) {
+		cleanUpWeakMap();
+		final Entry<K, V> entry = mWeakMap.get(key);
+		return entry == null ? null : entry.get();
+	}
 
-        public Entry(K key, V value, ReferenceQueue<V> queue) {
-            super(value, queue);
-            mKey = key;
-        }
-    }
+	// This is for debugging only
+	public synchronized ArrayList<K> keys() {
+		final Set<K> set = mWeakMap.keySet();
+		final ArrayList<K> result = new ArrayList<K>(set);
+		return result;
+	}
 
-    private void cleanUpWeakMap() {
-        Entry<K, V> entry = (Entry<K, V>) mQueue.poll();
-        while (entry != null) {
-            mWeakMap.remove(entry.mKey);
-            entry = (Entry<K, V>) mQueue.poll();
-        }
-    }
+	public synchronized V put(final K key, final V value) {
+		cleanUpWeakMap();
+		final Entry<K, V> entry = mWeakMap.put(key, new Entry<K, V>(key, value, mQueue));
+		return entry == null ? null : entry.get();
+	}
 
-    public synchronized V put(K key, V value) {
-        cleanUpWeakMap();
-        Entry<K, V> entry = mWeakMap.put(
-                key, new Entry<K, V>(key, value, mQueue));
-        return entry == null ? null : entry.get();
-    }
+	@SuppressWarnings("unchecked")
+	private void cleanUpWeakMap() {
+		Entry<K, V> entry = (Entry<K, V>) mQueue.poll();
+		while (entry != null) {
+			mWeakMap.remove(entry.mKey);
+			entry = (Entry<K, V>) mQueue.poll();
+		}
+	}
 
-    public synchronized V get(K key) {
-        cleanUpWeakMap();
-        Entry<K, V> entry = mWeakMap.get(key);
-        return entry == null ? null : entry.get();
-    }
+	// This is currently unused.
+	/*
+	 * public synchronized void clear() { mWeakMap.clear(); mQueue = new
+	 * ReferenceQueue<V>(); }
+	 */
 
-    // This is currently unused.
-    /*
-    public synchronized void clear() {
-        mWeakMap.clear();
-        mQueue = new ReferenceQueue<V>();
-    }
-    */
+	private static class Entry<K, V> extends WeakReference<V> {
+		K mKey;
 
-    // This is for debugging only
-    public synchronized ArrayList<K> keys() {
-        Set<K> set = mWeakMap.keySet();
-        ArrayList<K> result = new ArrayList<K>(set);
-        return result;
-    }
+		public Entry(final K key, final V value, final ReferenceQueue<V> queue) {
+			super(value, queue);
+			mKey = key;
+		}
+	}
 }

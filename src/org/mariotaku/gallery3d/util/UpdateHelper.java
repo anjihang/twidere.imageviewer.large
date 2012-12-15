@@ -19,41 +19,41 @@ import org.mariotaku.gallery3d.common.Utils;
 
 public class UpdateHelper {
 
-    private boolean mUpdated = false;
+	private boolean mUpdated = false;
 
-    public int update(int original, int update) {
-        if (original != update) {
-            mUpdated = true;
-            original = update;
-        }
-        return original;
-    }
+	public boolean isUpdated() {
+		return mUpdated;
+	}
 
-    public long update(long original, long update) {
-        if (original != update) {
-            mUpdated = true;
-            original = update;
-        }
-        return original;
-    }
+	public double update(double original, final double update) {
+		if (original != update) {
+			mUpdated = true;
+			original = update;
+		}
+		return original;
+	}
 
-    public double update(double original, double update) {
-        if (original != update) {
-            mUpdated = true;
-            original = update;
-        }
-        return original;
-    }
+	public int update(int original, final int update) {
+		if (original != update) {
+			mUpdated = true;
+			original = update;
+		}
+		return original;
+	}
 
-    public <T> T update(T original, T update) {
-        if (!Utils.equals(original, update)) {
-            mUpdated = true;
-            original = update;
-        }
-        return original;
-    }
+	public long update(long original, final long update) {
+		if (original != update) {
+			mUpdated = true;
+			original = update;
+		}
+		return original;
+	}
 
-    public boolean isUpdated() {
-        return mUpdated;
-    }
+	public <T> T update(T original, final T update) {
+		if (!Utils.equals(original, update)) {
+			mUpdated = true;
+			original = update;
+		}
+		return original;
+	}
 }

@@ -20,39 +20,39 @@ import android.graphics.Bitmap;
 import android.graphics.RectF;
 
 public class BitmapScreenNail implements ScreenNail {
-    private final BitmapTexture mBitmapTexture;
+	private final BitmapTexture mBitmapTexture;
 
-    public BitmapScreenNail(Bitmap bitmap) {
-        mBitmapTexture = new BitmapTexture(bitmap);
-    }
+	public BitmapScreenNail(final Bitmap bitmap) {
+		mBitmapTexture = new BitmapTexture(bitmap);
+	}
 
-    @Override
-    public int getWidth() {
-        return mBitmapTexture.getWidth();
-    }
+	@Override
+	public void draw(final GLCanvas canvas, final int x, final int y, final int width, final int height) {
+		mBitmapTexture.draw(canvas, x, y, width, height);
+	}
 
-    @Override
-    public int getHeight() {
-        return mBitmapTexture.getHeight();
-    }
+	@Override
+	public void draw(final GLCanvas canvas, final RectF source, final RectF dest) {
+		canvas.drawTexture(mBitmapTexture, source, dest);
+	}
 
-    @Override
-    public void draw(GLCanvas canvas, int x, int y, int width, int height) {
-        mBitmapTexture.draw(canvas, x, y, width, height);
-    }
+	@Override
+	public int getHeight() {
+		return mBitmapTexture.getHeight();
+	}
 
-    @Override
-    public void noDraw() {
-        // do nothing
-    }
+	@Override
+	public int getWidth() {
+		return mBitmapTexture.getWidth();
+	}
 
-    @Override
-    public void recycle() {
-        mBitmapTexture.recycle();
-    }
+	@Override
+	public void noDraw() {
+		// do nothing
+	}
 
-    @Override
-    public void draw(GLCanvas canvas, RectF source, RectF dest) {
-        canvas.drawTexture(mBitmapTexture, source, dest);
-    }
+	@Override
+	public void recycle() {
+		mBitmapTexture.recycle();
+	}
 }

@@ -17,6 +17,7 @@
 package org.mariotaku.gallery3d.ui;
 
 public interface OrientationSource {
-    public int getDisplayRotation();
-    public int getCompensation();
+	public int getCompensation();
+
+	public int getDisplayRotation();
 }

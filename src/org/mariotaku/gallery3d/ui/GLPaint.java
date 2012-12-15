@@ -18,25 +18,24 @@ package org.mariotaku.gallery3d.ui;
 
 import org.mariotaku.gallery3d.common.Utils;
 
-
 public class GLPaint {
-    private float mLineWidth = 1f;
-    private int mColor = 0;
+	private float mLineWidth = 1f;
+	private int mColor = 0;
 
-    public void setColor(int color) {
-        mColor = color;
-    }
+	public int getColor() {
+		return mColor;
+	}
 
-    public int getColor() {
-        return mColor;
-    }
+	public float getLineWidth() {
+		return mLineWidth;
+	}
 
-    public void setLineWidth(float width) {
-        Utils.assertTrue(width >= 0);
-        mLineWidth = width;
-    }
+	public void setColor(final int color) {
+		mColor = color;
+	}
 
-    public float getLineWidth() {
-        return mLineWidth;
-    }
+	public void setLineWidth(final float width) {
+		Utils.assertTrue(width >= 0);
+		mLineWidth = width;
+	}
 }

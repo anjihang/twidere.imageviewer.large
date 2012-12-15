@@ -24,29 +24,29 @@ import android.graphics.Canvas;
 // The subclasses should override onDraw() to draw on the bitmap.
 // By default CanvasTexture is not opaque.
 abstract class CanvasTexture extends UploadedTexture {
-    protected Canvas mCanvas;
-    private final Config mConfig;
+	protected Canvas mCanvas;
+	private final Config mConfig;
 
-    public CanvasTexture(int width, int height) {
-        mConfig = Config.ARGB_8888;
-        setSize(width, height);
-        setOpaque(false);
-    }
+	public CanvasTexture(final int width, final int height) {
+		mConfig = Config.ARGB_8888;
+		setSize(width, height);
+		setOpaque(false);
+	}
 
-    @Override
-    protected Bitmap onGetBitmap() {
-        Bitmap bitmap = Bitmap.createBitmap(mWidth, mHeight, mConfig);
-        mCanvas = new Canvas(bitmap);
-        onDraw(mCanvas, bitmap);
-        return bitmap;
-    }
+	abstract protected void onDraw(Canvas canvas, Bitmap backing);
 
-    @Override
-    protected void onFreeBitmap(Bitmap bitmap) {
-        if (!inFinalizer()) {
-            bitmap.recycle();
-        }
-    }
+	@Override
+	protected void onFreeBitmap(final Bitmap bitmap) {
+		if (!inFinalizer()) {
+			bitmap.recycle();
+		}
+	}
 
-    abstract protected void onDraw(Canvas canvas, Bitmap backing);
+	@Override
+	protected Bitmap onGetBitmap() {
+		final Bitmap bitmap = Bitmap.createBitmap(mWidth, mHeight, mConfig);
+		mCanvas = new Canvas(bitmap);
+		onDraw(mCanvas, bitmap);
+		return bitmap;
+	}
 }

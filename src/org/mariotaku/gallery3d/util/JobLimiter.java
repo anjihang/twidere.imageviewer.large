@@ -16,144 +16,150 @@
 
 package org.mariotaku.gallery3d.util;
 
+import java.util.LinkedList;
+
 import org.mariotaku.gallery3d.common.Utils;
 import org.mariotaku.gallery3d.util.ThreadPool.Job;
 import org.mariotaku.gallery3d.util.ThreadPool.JobContext;
 
-import java.util.LinkedList;
+import android.util.Log;
 
 // Limit the number of concurrent jobs that has been submitted into a ThreadPool
 @SuppressWarnings("rawtypes")
 public class JobLimiter implements FutureListener {
-    private static final String TAG = "JobLimiter";
+	private static final String TAG = "JobLimiter";
 
-    // State Transition:
-    //      INIT -> DONE, CANCELLED
-    //      DONE -> CANCELLED
-    private static final int STATE_INIT = 0;
-    private static final int STATE_DONE = 1;
-    private static final int STATE_CANCELLED = 2;
+	// State Transition:
+	// INIT -> DONE, CANCELLED
+	// DONE -> CANCELLED
+	private static final int STATE_INIT = 0;
+	private static final int STATE_DONE = 1;
+	private static final int STATE_CANCELLED = 2;
 
-    private final LinkedList<JobWrapper<?>> mJobs = new LinkedList<JobWrapper<?>>();
-    private final ThreadPool mPool;
-    private int mLimit;
+	private final LinkedList<JobWrapper<?>> mJobs = new LinkedList<JobWrapper<?>>();
+	private final ThreadPool mPool;
+	private int mLimit;
 
-    private static class JobWrapper<T> implements Future<T>, Job<T> {
-        private int mState = STATE_INIT;
-        private Job<T> mJob;
-        private Future<T> mDelegate;
-        private FutureListener<T> mListener;
-        private T mResult;
+	public JobLimiter(final ThreadPool pool, final int limit) {
+		mPool = Utils.checkNotNull(pool);
+		mLimit = limit;
+	}
 
-        public JobWrapper(Job<T> job, FutureListener<T> listener) {
-            mJob = job;
-            mListener = listener;
-        }
+	@Override
+	public synchronized void onFutureDone(final Future future) {
+		++mLimit;
+		submitTasksIfAllowed();
+	}
 
-        public synchronized void setFuture(Future<T> future) {
-            if (mState != STATE_INIT) return;
-            mDelegate = future;
-        }
+	public synchronized <T> Future<T> submit(final Job<T> job, final FutureListener<T> listener) {
+		final JobWrapper<T> future = new JobWrapper<T>(Utils.checkNotNull(job), listener);
+		mJobs.addLast(future);
+		submitTasksIfAllowed();
+		return future;
+	}
 
-        @Override
-        public void cancel() {
-            FutureListener<T> listener = null;
-            synchronized (this) {
-                if (mState != STATE_DONE) {
-                    listener = mListener;
-                    mJob = null;
-                    mListener = null;
-                    if (mDelegate != null) {
-                        mDelegate.cancel();
-                        mDelegate = null;
-                    }
-                }
-                mState = STATE_CANCELLED;
-                mResult = null;
-                notifyAll();
-            }
-            if (listener != null) listener.onFutureDone(this);
-        }
+	@SuppressWarnings("unchecked")
+	private void submitTasksIfAllowed() {
+		while (mLimit > 0 && !mJobs.isEmpty()) {
+			final JobWrapper wrapper = mJobs.removeFirst();
+			if (!wrapper.isCancelled()) {
+				--mLimit;
+				wrapper.setFuture(mPool.submit(wrapper, this));
+			}
+		}
+	}
 
-        @Override
-        public synchronized boolean isCancelled() {
-            return mState == STATE_CANCELLED;
-        }
+	private static class JobWrapper<T> implements Future<T>, Job<T> {
+		private int mState = STATE_INIT;
+		private Job<T> mJob;
+		private Future<T> mDelegate;
+		private FutureListener<T> mListener;
+		private T mResult;
 
-        @Override
-        public boolean isDone() {
-            // Both CANCELLED AND DONE is considered as done
-            return mState !=  STATE_INIT;
-        }
+		public JobWrapper(final Job<T> job, final FutureListener<T> listener) {
+			mJob = job;
+			mListener = listener;
+		}
 
-        @Override
-        public synchronized T get() {
-            while (mState == STATE_INIT) {
-                // handle the interrupted exception of wait()
-                Utils.waitWithoutInterrupt(this);
-            }
-            return mResult;
-        }
+		@Override
+		public void cancel() {
+			FutureListener<T> listener = null;
+			synchronized (this) {
+				if (mState != STATE_DONE) {
+					listener = mListener;
+					mJob = null;
+					mListener = null;
+					if (mDelegate != null) {
+						mDelegate.cancel();
+						mDelegate = null;
+					}
+				}
+				mState = STATE_CANCELLED;
+				mResult = null;
+				notifyAll();
+			}
+			if (listener != null) {
+				listener.onFutureDone(this);
+			}
+		}
 
-        @Override
-        public void waitDone() {
-            get();
-        }
+		@Override
+		public synchronized T get() {
+			while (mState == STATE_INIT) {
+				// handle the interrupted exception of wait()
+				Utils.waitWithoutInterrupt(this);
+			}
+			return mResult;
+		}
 
-        @Override
-        public T run(JobContext jc) {
-            Job<T> job = null;
-            synchronized (this) {
-                if (mState == STATE_CANCELLED) return null;
-                job = mJob;
-            }
-            T result  = null;
-            try {
-                result = job.run(jc);
-            } catch (Throwable t) {
-                Log.w(TAG, "error executing job: " + job, t);
-            }
-            FutureListener<T> listener = null;
-            synchronized (this) {
-                if (mState == STATE_CANCELLED) return null;
-                mState = STATE_DONE;
-                listener = mListener;
-                mListener = null;
-                mJob = null;
-                mResult = result;
-                notifyAll();
-            }
-            if (listener != null) listener.onFutureDone(this);
-            return result;
-        }
-    }
+		@Override
+		public synchronized boolean isCancelled() {
+			return mState == STATE_CANCELLED;
+		}
 
-    public JobLimiter(ThreadPool pool, int limit) {
-        mPool = Utils.checkNotNull(pool);
-        mLimit = limit;
-    }
+		@Override
+		public boolean isDone() {
+			// Both CANCELLED AND DONE is considered as done
+			return mState != STATE_INIT;
+		}
 
-    public synchronized <T> Future<T> submit(Job<T> job, FutureListener<T> listener) {
-        JobWrapper<T> future = new JobWrapper<T>(Utils.checkNotNull(job), listener);
-        mJobs.addLast(future);
-        submitTasksIfAllowed();
-        return future;
-    }
+		@Override
+		public T run(final JobContext jc) {
+			Job<T> job = null;
+			synchronized (this) {
+				if (mState == STATE_CANCELLED) return null;
+				job = mJob;
+			}
+			T result = null;
+			try {
+				result = job.run(jc);
+			} catch (final Throwable t) {
+				Log.w(TAG, "error executing job: " + job, t);
+			}
+			FutureListener<T> listener = null;
+			synchronized (this) {
+				if (mState == STATE_CANCELLED) return null;
+				mState = STATE_DONE;
+				listener = mListener;
+				mListener = null;
+				mJob = null;
+				mResult = result;
+				notifyAll();
+			}
+			if (listener != null) {
+				listener.onFutureDone(this);
+			}
+			return result;
+		}
 
-    @SuppressWarnings({"rawtypes", "unchecked"})
-    private void submitTasksIfAllowed() {
-        while (mLimit > 0 && !mJobs.isEmpty()) {
-            JobWrapper wrapper = mJobs.removeFirst();
-            if (!wrapper.isCancelled()) {
-                --mLimit;
-                wrapper.setFuture(mPool.submit(wrapper, this));
-            }
-        }
-    }
+		public synchronized void setFuture(final Future<T> future) {
+			if (mState != STATE_INIT) return;
+			mDelegate = future;
+		}
 
-    @Override
-    public synchronized void onFutureDone(Future future) {
-        ++mLimit;
-        submitTasksIfAllowed();
-    }
+		@Override
+		public void waitDone() {
+			get();
+		}
+	}
 }

@@ -17,13 +17,13 @@
 package org.mariotaku.gallery3d.util;
 
 public class Holder<T> {
-    private T mObject;
+	private T mObject;
 
-    public void set(T object) {
-        mObject = object;
-    }
+	public T get() {
+		return mObject;
+	}
 
-    public T get() {
-        return mObject;
-    }
+	public void set(final T object) {
+		mObject = object;
+	}
 }

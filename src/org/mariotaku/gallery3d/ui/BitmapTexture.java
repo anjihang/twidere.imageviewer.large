@@ -16,9 +16,9 @@
 
 package org.mariotaku.gallery3d.ui;
 
-import android.graphics.Bitmap;
-
 import org.mariotaku.gallery3d.common.Utils;
+
+import android.graphics.Bitmap;
 
 // BitmapTexture is a texture whose content is specified by a fixed Bitmap.
 //
@@ -26,29 +26,29 @@ import org.mariotaku.gallery3d.common.Utils;
 // is valid during the texture's lifetime. When the texture is recycled, it
 // does not free the Bitmap.
 public class BitmapTexture extends UploadedTexture {
-    protected Bitmap mContentBitmap;
+	protected Bitmap mContentBitmap;
 
-    public BitmapTexture(Bitmap bitmap) {
-        this(bitmap, false);
-    }
+	public BitmapTexture(final Bitmap bitmap) {
+		this(bitmap, false);
+	}
 
-    public BitmapTexture(Bitmap bitmap, boolean hasBorder) {
-        super(hasBorder);
-        Utils.assertTrue(bitmap != null && !bitmap.isRecycled());
-        mContentBitmap = bitmap;
-    }
+	public BitmapTexture(final Bitmap bitmap, final boolean hasBorder) {
+		super(hasBorder);
+		Utils.assertTrue(bitmap != null && !bitmap.isRecycled());
+		mContentBitmap = bitmap;
+	}
 
-    @Override
-    protected void onFreeBitmap(Bitmap bitmap) {
-        // Do nothing.
-    }
+	public Bitmap getBitmap() {
+		return mContentBitmap;
+	}
 
-    @Override
-    protected Bitmap onGetBitmap() {
-        return mContentBitmap;
-    }
+	@Override
+	protected void onFreeBitmap(final Bitmap bitmap) {
+		// Do nothing.
+	}
 
-    public Bitmap getBitmap() {
-        return mContentBitmap;
-    }
+	@Override
+	protected Bitmap onGetBitmap() {
+		return mContentBitmap;
+	}
 }

@@ -16,26 +16,30 @@
 
 package org.mariotaku.gallery3d.app;
 
-import android.content.ContentResolver;
-import android.content.Context;
-import android.content.res.Resources;
-import android.os.Looper;
-
 import org.mariotaku.gallery3d.data.DataManager;
 import org.mariotaku.gallery3d.data.DownloadCache;
 import org.mariotaku.gallery3d.data.ImageCacheService;
 import org.mariotaku.gallery3d.util.ThreadPool;
 
+import android.content.ContentResolver;
+import android.content.Context;
+import android.content.res.Resources;
+import android.os.Looper;
+
 public interface GalleryApp {
-    public DataManager getDataManager();
+	public Context getAndroidContext();
 
-    public StitchingProgressManager getStitchingProgressManager();
-    public ImageCacheService getImageCacheService();
-    public DownloadCache getDownloadCache();
-    public ThreadPool getThreadPool();
+	public ContentResolver getContentResolver();
 
-    public Context getAndroidContext();
-    public Looper getMainLooper();
-    public ContentResolver getContentResolver();
-    public Resources getResources();
+	public DataManager getDataManager();
+
+	public DownloadCache getDownloadCache();
+
+	public ImageCacheService getImageCacheService();
+
+	public Looper getMainLooper();
+
+	public Resources getResources();
+
+	public ThreadPool getThreadPool();
 }

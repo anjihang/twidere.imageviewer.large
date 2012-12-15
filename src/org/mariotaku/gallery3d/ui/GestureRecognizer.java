@@ -25,108 +25,107 @@ import android.view.ScaleGestureDetector;
 // This class aggregates three gesture detectors: GestureDetector,
 // ScaleGestureDetector, and DownUpDetector.
 public class GestureRecognizer {
-    @SuppressWarnings("unused")
-    private static final String TAG = "GestureRecognizer";
+	@SuppressWarnings("unused")
+	private static final String TAG = "GestureRecognizer";
 
-    public interface Listener {
-        boolean onSingleTapUp(float x, float y);
-        boolean onDoubleTap(float x, float y);
-        boolean onScroll(float dx, float dy, float totalX, float totalY);
-        boolean onFling(float velocityX, float velocityY);
-        boolean onScaleBegin(float focusX, float focusY);
-        boolean onScale(float focusX, float focusY, float scale);
-        void onScaleEnd();
-        void onDown(float x, float y);
-        void onUp();
-    }
+	private final GestureDetector mGestureDetector;
 
-    private final GestureDetector mGestureDetector;
-    private final ScaleGestureDetector mScaleDetector;
-    private final DownUpDetector mDownUpDetector;
-    private final Listener mListener;
+	private final ScaleGestureDetector mScaleDetector;
+	private final DownUpDetector mDownUpDetector;
+	private final Listener mListener;
 
-    public GestureRecognizer(Context context, Listener listener) {
-        mListener = listener;
-        mGestureDetector = new GestureDetector(context, new MyGestureListener(),
-                null, true /* ignoreMultitouch */);
-        mScaleDetector = new ScaleGestureDetector(
-                context, new MyScaleListener());
-        mDownUpDetector = new DownUpDetector(new MyDownUpListener());
-    }
+	public GestureRecognizer(final Context context, final Listener listener) {
+		mListener = listener;
+		mGestureDetector = new GestureDetector(context, new MyGestureListener(), null, true /* ignoreMultitouch */);
+		mScaleDetector = new ScaleGestureDetector(context, new MyScaleListener());
+		mDownUpDetector = new DownUpDetector(new MyDownUpListener());
+	}
 
-    public void onTouchEvent(MotionEvent event) {
-        mGestureDetector.onTouchEvent(event);
-        mScaleDetector.onTouchEvent(event);
-        mDownUpDetector.onTouchEvent(event);
-    }
+	public void cancelScale() {
+		final long now = SystemClock.uptimeMillis();
+		final MotionEvent cancelEvent = MotionEvent.obtain(now, now, MotionEvent.ACTION_CANCEL, 0, 0, 0);
+		mScaleDetector.onTouchEvent(cancelEvent);
+		cancelEvent.recycle();
+	}
 
-    public boolean isDown() {
-        return mDownUpDetector.isDown();
-    }
+	public boolean isDown() {
+		return mDownUpDetector.isDown();
+	}
 
-    public void cancelScale() {
-        long now = SystemClock.uptimeMillis();
-        MotionEvent cancelEvent = MotionEvent.obtain(
-                now, now, MotionEvent.ACTION_CANCEL, 0, 0, 0);
-        mScaleDetector.onTouchEvent(cancelEvent);
-        cancelEvent.recycle();
-    }
+	public void onTouchEvent(final MotionEvent event) {
+		mGestureDetector.onTouchEvent(event);
+		mScaleDetector.onTouchEvent(event);
+		mDownUpDetector.onTouchEvent(event);
+	}
 
-    private class MyGestureListener
-                extends GestureDetector.SimpleOnGestureListener {
-        @Override
-        public boolean onSingleTapUp(MotionEvent e) {
-            return mListener.onSingleTapUp(e.getX(), e.getY());
-        }
+	public interface Listener {
+		boolean onDoubleTap(float x, float y);
 
-        @Override
-        public boolean onDoubleTap(MotionEvent e) {
-            return mListener.onDoubleTap(e.getX(), e.getY());
-        }
+		void onDown(float x, float y);
 
-        @Override
-        public boolean onScroll(
-                MotionEvent e1, MotionEvent e2, float dx, float dy) {
-            return mListener.onScroll(
-                    dx, dy, e2.getX() - e1.getX(), e2.getY() - e1.getY());
-        }
+		boolean onFling(float velocityX, float velocityY);
 
-        @Override
-        public boolean onFling(MotionEvent e1, MotionEvent e2, float velocityX,
-                float velocityY) {
-            return mListener.onFling(velocityX, velocityY);
-        }
-    }
+		boolean onScale(float focusX, float focusY, float scale);
 
-    private class MyScaleListener
-            extends ScaleGestureDetector.SimpleOnScaleGestureListener {
-        @Override
-        public boolean onScaleBegin(ScaleGestureDetector detector) {
-            return mListener.onScaleBegin(
-                    detector.getFocusX(), detector.getFocusY());
-        }
+		boolean onScaleBegin(float focusX, float focusY);
 
-        @Override
-        public boolean onScale(ScaleGestureDetector detector) {
-            return mListener.onScale(detector.getFocusX(),
-                    detector.getFocusY(), detector.getScaleFactor());
-        }
+		void onScaleEnd();
 
-        @Override
-        public void onScaleEnd(ScaleGestureDetector detector) {
-            mListener.onScaleEnd();
-        }
-    }
+		boolean onScroll(float dx, float dy, float totalX, float totalY);
 
-    private class MyDownUpListener implements DownUpDetector.DownUpListener {
-        @Override
-        public void onDown(MotionEvent e) {
-            mListener.onDown(e.getX(), e.getY());
-        }
+		boolean onSingleTapUp(float x, float y);
 
-        @Override
-        public void onUp(MotionEvent e) {
-            mListener.onUp();
-        }
-    }
+		void onUp();
+	}
+
+	private class MyDownUpListener implements DownUpDetector.DownUpListener {
+		@Override
+		public void onDown(final MotionEvent e) {
+			mListener.onDown(e.getX(), e.getY());
+		}
+
+		@Override
+		public void onUp(final MotionEvent e) {
+			mListener.onUp();
+		}
+	}
+
+	private class MyGestureListener extends GestureDetector.SimpleOnGestureListener {
+		@Override
+		public boolean onDoubleTap(final MotionEvent e) {
+			return mListener.onDoubleTap(e.getX(), e.getY());
+		}
+
+		@Override
+		public boolean onFling(final MotionEvent e1, final MotionEvent e2, final float velocityX, final float velocityY) {
+			return mListener.onFling(velocityX, velocityY);
+		}
+
+		@Override
+		public boolean onScroll(final MotionEvent e1, final MotionEvent e2, final float dx, final float dy) {
+			return mListener.onScroll(dx, dy, e2.getX() - e1.getX(), e2.getY() - e1.getY());
+		}
+
+		@Override
+		public boolean onSingleTapUp(final MotionEvent e) {
+			return mListener.onSingleTapUp(e.getX(), e.getY());
+		}
+	}
+
+	private class MyScaleListener extends ScaleGestureDetector.SimpleOnScaleGestureListener {
+		@Override
+		public boolean onScale(final ScaleGestureDetector detector) {
+			return mListener.onScale(detector.getFocusX(), detector.getFocusY(), detector.getScaleFactor());
+		}
+
+		@Override
+		public boolean onScaleBegin(final ScaleGestureDetector detector) {
+			return mListener.onScaleBegin(detector.getFocusX(), detector.getFocusY());
+		}
+
+		@Override
+		public void onScaleEnd(final ScaleGestureDetector detector) {
+			mListener.onScaleEnd();
+		}
+	}
 }

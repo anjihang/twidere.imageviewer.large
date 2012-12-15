@@ -16,19 +16,21 @@
 
 package org.mariotaku.gallery3d.app;
 
+import org.mariotaku.gallery3d.data.DataManager;
+import org.mariotaku.gallery3d.util.ThreadPool;
+
 import android.content.Context;
 import android.content.res.Resources;
 import android.os.Looper;
 
-import org.mariotaku.gallery3d.data.DataManager;
-import org.mariotaku.gallery3d.util.ThreadPool;
-
 public interface GalleryContext {
-    public DataManager getDataManager();
+	public Context getAndroidContext();
 
-    public Context getAndroidContext();
+	public DataManager getDataManager();
 
-    public Looper getMainLooper();
-    public Resources getResources();
-    public ThreadPool getThreadPool();
+	public Looper getMainLooper();
+
+	public Resources getResources();
+
+	public ThreadPool getThreadPool();
 }

@@ -16,52 +16,52 @@
 
 package org.mariotaku.gallery3d.util;
 
-import org.mariotaku.gallery3d.common.Utils;
-
 import java.io.IOException;
 import java.io.InterruptedIOException;
 import java.io.OutputStream;
 
+import org.mariotaku.gallery3d.common.Utils;
+
 public class InterruptableOutputStream extends OutputStream {
 
-    private static final int MAX_WRITE_BYTES = 4096;
+	private static final int MAX_WRITE_BYTES = 4096;
 
-    private OutputStream mOutputStream;
-    private volatile boolean mIsInterrupted = false;
+	private final OutputStream mOutputStream;
+	private volatile boolean mIsInterrupted = false;
 
-    public InterruptableOutputStream(OutputStream outputStream) {
-        mOutputStream = Utils.checkNotNull(outputStream);
-    }
+	public InterruptableOutputStream(final OutputStream outputStream) {
+		mOutputStream = Utils.checkNotNull(outputStream);
+	}
 
-    @Override
-    public void write(int oneByte) throws IOException {
-        if (mIsInterrupted) throw new InterruptedIOException();
-        mOutputStream.write(oneByte);
-    }
+	@Override
+	public void close() throws IOException {
+		mOutputStream.close();
+	}
 
-    @Override
-    public void write(byte[] buffer, int offset, int count) throws IOException {
-        int end = offset + count;
-        while (offset < end) {
-            if (mIsInterrupted) throw new InterruptedIOException();
-            int bytesCount = Math.min(MAX_WRITE_BYTES, end - offset);
-            mOutputStream.write(buffer, offset, bytesCount);
-            offset += bytesCount;
-        }
-    }
+	@Override
+	public void flush() throws IOException {
+		if (mIsInterrupted) throw new InterruptedIOException();
+		mOutputStream.flush();
+	}
 
-    @Override
-    public void close() throws IOException {
-        mOutputStream.close();
-    }
+	public void interrupt() {
+		mIsInterrupted = true;
+	}
 
-    @Override
-    public void flush() throws IOException {
-        if (mIsInterrupted) throw new InterruptedIOException();
-        mOutputStream.flush();
-    }
+	@Override
+	public void write(final byte[] buffer, int offset, final int count) throws IOException {
+		final int end = offset + count;
+		while (offset < end) {
+			if (mIsInterrupted) throw new InterruptedIOException();
+			final int bytesCount = Math.min(MAX_WRITE_BYTES, end - offset);
+			mOutputStream.write(buffer, offset, bytesCount);
+			offset += bytesCount;
+		}
+	}
 
-    public void interrupt() {
-        mIsInterrupted = true;
-    }
+	@Override
+	public void write(final int oneByte) throws IOException {
+		if (mIsInterrupted) throw new InterruptedIOException();
+		mOutputStream.write(oneByte);
+	}
 }

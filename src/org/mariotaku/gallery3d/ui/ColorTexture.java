@@ -21,43 +21,43 @@ import org.mariotaku.gallery3d.common.Utils;
 // ColorTexture is a texture which fills the rectangle with the specified color.
 public class ColorTexture implements Texture {
 
-    private final int mColor;
-    private int mWidth;
-    private int mHeight;
+	private final int mColor;
+	private int mWidth;
+	private int mHeight;
 
-    public ColorTexture(int color) {
-        mColor = color;
-        mWidth = 1;
-        mHeight = 1;
-    }
+	public ColorTexture(final int color) {
+		mColor = color;
+		mWidth = 1;
+		mHeight = 1;
+	}
 
-    @Override
-    public void draw(GLCanvas canvas, int x, int y) {
-        draw(canvas, x, y, mWidth, mHeight);
-    }
+	@Override
+	public void draw(final GLCanvas canvas, final int x, final int y) {
+		draw(canvas, x, y, mWidth, mHeight);
+	}
 
-    @Override
-    public void draw(GLCanvas canvas, int x, int y, int w, int h) {
-        canvas.fillRect(x, y, w, h, mColor);
-    }
+	@Override
+	public void draw(final GLCanvas canvas, final int x, final int y, final int w, final int h) {
+		canvas.fillRect(x, y, w, h, mColor);
+	}
 
-    @Override
-    public boolean isOpaque() {
-        return Utils.isOpaque(mColor);
-    }
+	@Override
+	public int getHeight() {
+		return mHeight;
+	}
 
-    public void setSize(int width, int height) {
-        mWidth = width;
-        mHeight = height;
-    }
+	@Override
+	public int getWidth() {
+		return mWidth;
+	}
 
-    @Override
-    public int getWidth() {
-        return mWidth;
-    }
+	@Override
+	public boolean isOpaque() {
+		return Utils.isOpaque(mColor);
+	}
 
-    @Override
-    public int getHeight() {
-        return mHeight;
-    }
+	public void setSize(final int width, final int height) {
+		mWidth = width;
+		mHeight = height;
+	}
 }

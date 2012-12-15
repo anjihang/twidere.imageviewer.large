@@ -16,56 +16,55 @@
 
 package org.mariotaku.gallery3d.util;
 
-
 public class LinkedNode {
-    private LinkedNode mPrev;
-    private LinkedNode mNext;
+	private LinkedNode mPrev;
+	private LinkedNode mNext;
 
-    public LinkedNode() {
-        mPrev = mNext = this;
-    }
+	public LinkedNode() {
+		mPrev = mNext = this;
+	}
 
-    public void insert(LinkedNode node) {
-        node.mNext = mNext;
-        mNext.mPrev = node;
-        node.mPrev = this;
-        mNext = node;
-    }
+	public void insert(final LinkedNode node) {
+		node.mNext = mNext;
+		mNext.mPrev = node;
+		node.mPrev = this;
+		mNext = node;
+	}
 
-    public void remove() {
-        if (mNext == this) throw new IllegalStateException();
-        mPrev.mNext = mNext;
-        mNext.mPrev = mPrev;
-        mPrev = mNext = null;
-    }
+	public void remove() {
+		if (mNext == this) throw new IllegalStateException();
+		mPrev.mNext = mNext;
+		mNext.mPrev = mPrev;
+		mPrev = mNext = null;
+	}
 
-    @SuppressWarnings("unchecked")
-    public static class List<T extends LinkedNode> {
-        private LinkedNode mHead = new LinkedNode();
+	public static <T extends LinkedNode> List<T> newList() {
+		return new List<T>();
+	}
 
-        public void insertLast(T node) {
-            mHead.mPrev.insert(node);
-        }
+	@SuppressWarnings("unchecked")
+	public static class List<T extends LinkedNode> {
+		private final LinkedNode mHead = new LinkedNode();
 
-        public T getFirst() {
-            return (T) (mHead.mNext == mHead ? null : mHead.mNext);
-        }
+		public T getFirst() {
+			return (T) (mHead.mNext == mHead ? null : mHead.mNext);
+		}
 
-        public T getLast() {
-            return (T) (mHead.mPrev == mHead ? null : mHead.mPrev);
-        }
+		public T getLast() {
+			return (T) (mHead.mPrev == mHead ? null : mHead.mPrev);
+		}
 
-        public T nextOf(T node) {
-            return (T) (node.mNext == mHead ? null : node.mNext);
-        }
+		public void insertLast(final T node) {
+			mHead.mPrev.insert(node);
+		}
 
-        public T previousOf(T node) {
-            return (T) (node.mPrev == mHead ? null : node.mPrev);
-        }
+		public T nextOf(final T node) {
+			return (T) (node.mNext == mHead ? null : node.mNext);
+		}
 
-    }
+		public T previousOf(final T node) {
+			return (T) (node.mPrev == mHead ? null : node.mPrev);
+		}
 
-    public static <T extends LinkedNode> List<T> newList() {
-        return new List<T>();
-    }
+	}
 }

@@ -16,17 +16,9 @@
 
 package org.mariotaku.gallery3d.app;
 
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
-import android.graphics.BitmapRegionDecoder;
-import android.graphics.Rect;
-import android.os.Handler;
-import android.os.Message;
-
 import org.mariotaku.gallery3d.common.BitmapUtils;
 import org.mariotaku.gallery3d.common.Utils;
 import org.mariotaku.gallery3d.data.MediaItem;
-import org.mariotaku.gallery3d.data.Path;
 import org.mariotaku.gallery3d.ui.BitmapScreenNail;
 import org.mariotaku.gallery3d.ui.PhotoView;
 import org.mariotaku.gallery3d.ui.ScreenNail;
@@ -36,228 +28,184 @@ import org.mariotaku.gallery3d.util.Future;
 import org.mariotaku.gallery3d.util.FutureListener;
 import org.mariotaku.gallery3d.util.ThreadPool;
 
-public class SinglePhotoDataAdapter extends TileImageViewAdapter
-        implements PhotoPage.Model {
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.BitmapRegionDecoder;
+import android.graphics.Rect;
+import android.os.Handler;
+import android.os.Message;
+import android.util.Log;
 
-    private static final String TAG = "SinglePhotoDataAdapter";
-    private static final int SIZE_BACKUP = 1024;
-    private static final int MSG_UPDATE_IMAGE = 1;
+public class SinglePhotoDataAdapter extends TileImageViewAdapter implements PhotoPage.Model {
 
-    private MediaItem mItem;
-    private boolean mHasFullImage;
-    private Future<?> mTask;
-    private Handler mHandler;
+	private static final String TAG = "SinglePhotoDataAdapter";
+	private static final int SIZE_BACKUP = 1024;
+	private static final int MSG_UPDATE_IMAGE = 1;
 
-    private PhotoView mPhotoView;
-    private ThreadPool mThreadPool;
-    private int mLoadingState = LOADING_INIT;
-    private BitmapScreenNail mBitmapScreenNail;
+	private final MediaItem mItem;
+	private final boolean mHasFullImage;
+	private Future<?> mTask;
+	private final Handler mHandler;
 
-    public SinglePhotoDataAdapter(
-            AbstractGalleryActivity activity, PhotoView view, MediaItem item) {
-        mItem = Utils.checkNotNull(item);
-        mHasFullImage = (item.getSupportedOperations() &
-                MediaItem.SUPPORT_FULL_IMAGE) != 0;
-        mPhotoView = Utils.checkNotNull(view);
-        mHandler = new SynchronizedHandler(activity.getGLRoot()) {
-            @Override
-            @SuppressWarnings("unchecked")
-            public void handleMessage(Message message) {
-                Utils.assertTrue(message.what == MSG_UPDATE_IMAGE);
-                if (mHasFullImage) {
-                    onDecodeLargeComplete((ImageBundle) message.obj);
-                } else {
-                    onDecodeThumbComplete((Future<Bitmap>) message.obj);
-                }
-            }
-        };
-        mThreadPool = activity.getThreadPool();
-    }
+	private final PhotoView mPhotoView;
+	private final ThreadPool mThreadPool;
+	private int mLoadingState = LOADING_INIT;
+	private BitmapScreenNail mBitmapScreenNail;
 
-    private static class ImageBundle {
-        public final BitmapRegionDecoder decoder;
-        public final Bitmap backupImage;
+	private final FutureListener<BitmapRegionDecoder> mLargeListener = new FutureListener<BitmapRegionDecoder>() {
+		@Override
+		public void onFutureDone(final Future<BitmapRegionDecoder> future) {
+			final BitmapRegionDecoder decoder = future.get();
+			if (decoder == null) return;
+			final int width = decoder.getWidth();
+			final int height = decoder.getHeight();
+			final BitmapFactory.Options options = new BitmapFactory.Options();
+			options.inSampleSize = BitmapUtils.computeSampleSize((float) SIZE_BACKUP / Math.max(width, height));
+			final Bitmap bitmap = decoder.decodeRegion(new Rect(0, 0, width, height), options);
+			mHandler.sendMessage(mHandler.obtainMessage(MSG_UPDATE_IMAGE, new ImageBundle(decoder, bitmap)));
+		}
+	};
 
-        public ImageBundle(BitmapRegionDecoder decoder, Bitmap backupImage) {
-            this.decoder = decoder;
-            this.backupImage = backupImage;
-        }
-    }
+	private final FutureListener<Bitmap> mThumbListener = new FutureListener<Bitmap>() {
+		@Override
+		public void onFutureDone(final Future<Bitmap> future) {
+			mHandler.sendMessage(mHandler.obtainMessage(MSG_UPDATE_IMAGE, future));
+		}
+	};
 
-    private FutureListener<BitmapRegionDecoder> mLargeListener =
-            new FutureListener<BitmapRegionDecoder>() {
-        @Override
-        public void onFutureDone(Future<BitmapRegionDecoder> future) {
-            BitmapRegionDecoder decoder = future.get();
-            if (decoder == null) return;
-            int width = decoder.getWidth();
-            int height = decoder.getHeight();
-            BitmapFactory.Options options = new BitmapFactory.Options();
-            options.inSampleSize = BitmapUtils.computeSampleSize(
-                    (float) SIZE_BACKUP / Math.max(width, height));
-            Bitmap bitmap = decoder.decodeRegion(new Rect(0, 0, width, height), options);
-            mHandler.sendMessage(mHandler.obtainMessage(
-                    MSG_UPDATE_IMAGE, new ImageBundle(decoder, bitmap)));
-        }
-    };
+	public SinglePhotoDataAdapter(final AbstractGalleryActivity activity, final PhotoView view, final MediaItem item) {
+		mItem = Utils.checkNotNull(item);
+		mHasFullImage = (item.getSupportedOperations() & MediaItem.SUPPORT_FULL_IMAGE) != 0;
+		mPhotoView = Utils.checkNotNull(view);
+		mHandler = new SynchronizedHandler(activity.getGLRoot()) {
+			@Override
+			@SuppressWarnings("unchecked")
+			public void handleMessage(final Message message) {
+				Utils.assertTrue(message.what == MSG_UPDATE_IMAGE);
+				if (mHasFullImage) {
+					onDecodeLargeComplete((ImageBundle) message.obj);
+				} else {
+					onDecodeThumbComplete((Future<Bitmap>) message.obj);
+				}
+			}
+		};
+		mThreadPool = activity.getThreadPool();
+	}
 
-    private FutureListener<Bitmap> mThumbListener =
-            new FutureListener<Bitmap>() {
-        @Override
-        public void onFutureDone(Future<Bitmap> future) {
-            mHandler.sendMessage(
-                    mHandler.obtainMessage(MSG_UPDATE_IMAGE, future));
-        }
-    };
+	@Override
+	public int getCurrentIndex() {
+		return 0;
+	}
 
-    @Override
-    public boolean isEmpty() {
-        return false;
-    }
+	@Override
+	public int getImageRotation(final int offset) {
+		return offset == 0 ? mItem.getFullImageRotation() : 0;
+	}
 
-    private void setScreenNail(Bitmap bitmap, int width, int height) {
-        mBitmapScreenNail = new BitmapScreenNail(bitmap);
-        setScreenNail(mBitmapScreenNail, width, height);
-    }
+	@Override
+	public void getImageSize(final int offset, final PhotoView.Size size) {
+		if (offset == 0) {
+			size.width = mItem.getWidth();
+			size.height = mItem.getHeight();
+		} else {
+			size.width = 0;
+			size.height = 0;
+		}
+	}
 
-    private void onDecodeLargeComplete(ImageBundle bundle) {
-        try {
-            setScreenNail(bundle.backupImage,
-                    bundle.decoder.getWidth(), bundle.decoder.getHeight());
-            setRegionDecoder(bundle.decoder);
-            mPhotoView.notifyImageChange(0);
-        } catch (Throwable t) {
-            Log.w(TAG, "fail to decode large", t);
-        }
-    }
+	@Override
+	public int getLoadingState(final int offset) {
+		return mLoadingState;
+	}
 
-    private void onDecodeThumbComplete(Future<Bitmap> future) {
-        try {
-            Bitmap backup = future.get();
-            if (backup == null) {
-                mLoadingState = LOADING_FAIL;
-                return;
-            } else {
-                mLoadingState = LOADING_COMPLETE;
-            }
-            setScreenNail(backup, backup.getWidth(), backup.getHeight());
-            mPhotoView.notifyImageChange(0);
-        } catch (Throwable t) {
-            Log.w(TAG, "fail to decode thumb", t);
-        }
-    }
+	@Override
+	public MediaItem getMediaItem(final int offset) {
+		return offset == 0 ? mItem : null;
+	}
 
-    @Override
-    public void resume() {
-        if (mTask == null) {
-            if (mHasFullImage) {
-                mTask = mThreadPool.submit(
-                        mItem.requestLargeImage(), mLargeListener);
-            } else {
-                mTask = mThreadPool.submit(
-                        mItem.requestImage(MediaItem.TYPE_THUMBNAIL),
-                        mThumbListener);
-            }
-        }
-    }
+	@Override
+	public ScreenNail getScreenNail(final int offset) {
+		return offset == 0 ? getScreenNail() : null;
+	}
 
-    @Override
-    public void pause() {
-        Future<?> task = mTask;
-        task.cancel();
-        task.waitDone();
-        if (task.get() == null) {
-            mTask = null;
-        }
-        if (mBitmapScreenNail != null) {
-            mBitmapScreenNail.recycle();
-            mBitmapScreenNail = null;
-        }
-    }
+	@Override
+	public boolean isDeletable(final int offset) {
+		return (mItem.getSupportedOperations() & MediaItem.SUPPORT_DELETE) != 0;
+	}
 
-    @Override
-    public void moveTo(int index) {
-        throw new UnsupportedOperationException();
-    }
+	@Override
+	public boolean isEmpty() {
+		return false;
+	}
 
-    @Override
-    public void getImageSize(int offset, PhotoView.Size size) {
-        if (offset == 0) {
-            size.width = mItem.getWidth();
-            size.height = mItem.getHeight();
-        } else {
-            size.width = 0;
-            size.height = 0;
-        }
-    }
+	@Override
+	public void pause() {
+		final Future<?> task = mTask;
+		task.cancel();
+		task.waitDone();
+		if (task.get() == null) {
+			mTask = null;
+		}
+		if (mBitmapScreenNail != null) {
+			mBitmapScreenNail.recycle();
+			mBitmapScreenNail = null;
+		}
+	}
 
-    @Override
-    public int getImageRotation(int offset) {
-        return (offset == 0) ? mItem.getFullImageRotation() : 0;
-    }
+	@Override
+	public void resume() {
+		if (mTask == null) {
+			if (mHasFullImage) {
+				mTask = mThreadPool.submit(mItem.requestLargeImage(), mLargeListener);
+			} else {
+				mTask = mThreadPool.submit(mItem.requestImage(MediaItem.TYPE_THUMBNAIL), mThumbListener);
+			}
+		}
+	}
 
-    @Override
-    public ScreenNail getScreenNail(int offset) {
-        return (offset == 0) ? getScreenNail() : null;
-    }
+	@Override
+	public void setNeedFullImage(final boolean enabled) {
+		// currently not necessary.
+	}
 
-    @Override
-    public void setNeedFullImage(boolean enabled) {
-        // currently not necessary.
-    }
+	private void onDecodeLargeComplete(final ImageBundle bundle) {
+		try {
+			setScreenNail(bundle.backupImage, bundle.decoder.getWidth(), bundle.decoder.getHeight());
+			setRegionDecoder(bundle.decoder);
+			mPhotoView.notifyImageChange(0);
+		} catch (final Throwable t) {
+			Log.w(TAG, "fail to decode large", t);
+		}
+	}
 
-    @Override
-    public boolean isCamera(int offset) {
-        return false;
-    }
+	private void onDecodeThumbComplete(final Future<Bitmap> future) {
+		try {
+			final Bitmap backup = future.get();
+			if (backup == null) {
+				mLoadingState = LOADING_FAIL;
+				return;
+			} else {
+				mLoadingState = LOADING_COMPLETE;
+			}
+			setScreenNail(backup, backup.getWidth(), backup.getHeight());
+			mPhotoView.notifyImageChange(0);
+		} catch (final Throwable t) {
+			Log.w(TAG, "fail to decode thumb", t);
+		}
+	}
 
-    @Override
-    public boolean isPanorama(int offset) {
-        return false;
-    }
+	private void setScreenNail(final Bitmap bitmap, final int width, final int height) {
+		mBitmapScreenNail = new BitmapScreenNail(bitmap);
+		setScreenNail(mBitmapScreenNail, width, height);
+	}
 
-    @Override
-    public boolean isStaticCamera(int offset) {
-        return false;
-    }
+	private static class ImageBundle {
+		public final BitmapRegionDecoder decoder;
+		public final Bitmap backupImage;
 
-    @Override
-    public boolean isVideo(int offset) {
-        return mItem.getMediaType() == MediaItem.MEDIA_TYPE_VIDEO;
-    }
-
-    @Override
-    public boolean isDeletable(int offset) {
-        return (mItem.getSupportedOperations() & MediaItem.SUPPORT_DELETE) != 0;
-    }
-
-    @Override
-    public MediaItem getMediaItem(int offset) {
-        return offset == 0 ? mItem : null;
-    }
-
-    @Override
-    public int getCurrentIndex() {
-        return 0;
-    }
-
-    @Override
-    public void setCurrentPhoto(Path path, int indexHint) {
-        // ignore
-    }
-
-    @Override
-    public void setFocusHintDirection(int direction) {
-        // ignore
-    }
-
-    @Override
-    public void setFocusHintPath(Path path) {
-        // ignore
-    }
-
-    @Override
-    public int getLoadingState(int offset) {
-        return mLoadingState;
-    }
+		public ImageBundle(final BitmapRegionDecoder decoder, final Bitmap backupImage) {
+			this.decoder = decoder;
+			this.backupImage = backupImage;
+		}
+	}
 }

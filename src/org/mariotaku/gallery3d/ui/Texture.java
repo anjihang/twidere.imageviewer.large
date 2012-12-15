@@ -35,9 +35,13 @@ package org.mariotaku.gallery3d.ui;
 //          -- StringTexture
 //
 public interface Texture {
-    public int getWidth();
-    public int getHeight();
-    public void draw(GLCanvas canvas, int x, int y);
-    public void draw(GLCanvas canvas, int x, int y, int w, int h);
-    public boolean isOpaque();
+	public void draw(GLCanvas canvas, int x, int y);
+
+	public void draw(GLCanvas canvas, int x, int y, int w, int h);
+
+	public int getHeight();
+
+	public int getWidth();
+
+	public boolean isOpaque();
 }

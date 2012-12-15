@@ -16,106 +16,91 @@
 
 package org.mariotaku.gallery3d.app;
 
-import android.app.Application;
-import android.content.ComponentName;
-import android.content.Context;
-import android.content.pm.PackageManager;
-import android.os.AsyncTask;
+import java.io.File;
 
-import org.mariotaku.gallery3d.common.ApiHelper;
 import org.mariotaku.gallery3d.data.DataManager;
 import org.mariotaku.gallery3d.data.DownloadCache;
 import org.mariotaku.gallery3d.data.ImageCacheService;
 import org.mariotaku.gallery3d.util.GalleryUtils;
-import org.mariotaku.gallery3d.util.LightCycleHelper;
 import org.mariotaku.gallery3d.util.ThreadPool;
 
-import java.io.File;
+import android.app.Application;
+import android.content.Context;
+import android.os.AsyncTask;
 
 public class GalleryAppImpl extends Application implements GalleryApp {
 
-    private static final String DOWNLOAD_FOLDER = "download";
-    private static final long DOWNLOAD_CAPACITY = 64 * 1024 * 1024; // 64M
+	private static final String DOWNLOAD_FOLDER = "download";
+	private static final long DOWNLOAD_CAPACITY = 64 * 1024 * 1024; // 64M
 
-    private ImageCacheService mImageCacheService;
-    private Object mLock = new Object();
-    private DataManager mDataManager;
-    private ThreadPool mThreadPool;
-    private DownloadCache mDownloadCache;
-    private StitchingProgressManager mStitchingProgressManager;
+	private ImageCacheService mImageCacheService;
+	private final Object mLock = new Object();
+	private DataManager mDataManager;
+	private ThreadPool mThreadPool;
+	private DownloadCache mDownloadCache;
 
-    @Override
-    public void onCreate() {
-        super.onCreate();
-        initializeAsyncTask();
-        GalleryUtils.initialize(this);
+	@Override
+	public Context getAndroidContext() {
+		return this;
+	}
 
-        mStitchingProgressManager = LightCycleHelper.createStitchingManagerInstance(this);
-        if (mStitchingProgressManager != null) {
-            mStitchingProgressManager.addChangeListener(getDataManager());
-        }
-    }
+	@Override
+	public synchronized DataManager getDataManager() {
+		if (mDataManager == null) {
+			mDataManager = new DataManager(this);
+			mDataManager.initializeSourceMap();
+		}
+		return mDataManager;
+	}
 
-    @Override
-    public Context getAndroidContext() {
-        return this;
-    }
+	@Override
+	public synchronized DownloadCache getDownloadCache() {
+		if (mDownloadCache == null) {
+			final File cacheDir = new File(getExternalCacheDir(), DOWNLOAD_FOLDER);
 
-    @Override
-    public synchronized DataManager getDataManager() {
-        if (mDataManager == null) {
-            mDataManager = new DataManager(this);
-            mDataManager.initializeSourceMap();
-        }
-        return mDataManager;
-    }
+			if (!cacheDir.isDirectory()) {
+				cacheDir.mkdirs();
+			}
 
-    @Override
-    public StitchingProgressManager getStitchingProgressManager() {
-        return mStitchingProgressManager;
-    }
+			if (!cacheDir.isDirectory()) throw new RuntimeException("fail to create: " + cacheDir.getAbsolutePath());
+			mDownloadCache = new DownloadCache(this, cacheDir, DOWNLOAD_CAPACITY);
+		}
+		return mDownloadCache;
+	}
 
-    @Override
-    public ImageCacheService getImageCacheService() {
-        // This method may block on file I/O so a dedicated lock is needed here.
-        synchronized (mLock) {
-            if (mImageCacheService == null) {
-                mImageCacheService = new ImageCacheService(getAndroidContext());
-            }
-            return mImageCacheService;
-        }
-    }
+	@Override
+	public ImageCacheService getImageCacheService() {
+		// This method may block on file I/O so a dedicated lock is needed here.
+		synchronized (mLock) {
+			if (mImageCacheService == null) {
+				mImageCacheService = new ImageCacheService(getAndroidContext());
+			}
+			return mImageCacheService;
+		}
+	}
 
-    @Override
-    public synchronized ThreadPool getThreadPool() {
-        if (mThreadPool == null) {
-            mThreadPool = new ThreadPool();
-        }
-        return mThreadPool;
-    }
+	@Override
+	public synchronized ThreadPool getThreadPool() {
+		if (mThreadPool == null) {
+			mThreadPool = new ThreadPool();
+		}
+		return mThreadPool;
+	}
 
-    @Override
-    public synchronized DownloadCache getDownloadCache() {
-        if (mDownloadCache == null) {
-            File cacheDir = new File(getExternalCacheDir(), DOWNLOAD_FOLDER);
+	@Override
+	public void onCreate() {
+		super.onCreate();
+		initializeAsyncTask();
+		GalleryUtils.initialize(this);
 
-            if (!cacheDir.isDirectory()) cacheDir.mkdirs();
+	}
 
-            if (!cacheDir.isDirectory()) {
-                throw new RuntimeException(
-                        "fail to create: " + cacheDir.getAbsolutePath());
-            }
-            mDownloadCache = new DownloadCache(this, cacheDir, DOWNLOAD_CAPACITY);
-        }
-        return mDownloadCache;
-    }
-
-    private void initializeAsyncTask() {
-        // AsyncTask class needs to be loaded in UI thread.
-        // So we load it here to comply the rule.
-        try {
-            Class.forName(AsyncTask.class.getName());
-        } catch (ClassNotFoundException e) {
-        }
-    }
+	private void initializeAsyncTask() {
+		// AsyncTask class needs to be loaded in UI thread.
+		// So we load it here to comply the rule.
+		try {
+			Class.forName(AsyncTask.class.getName());
+		} catch (final ClassNotFoundException e) {
+		}
+	}
 }

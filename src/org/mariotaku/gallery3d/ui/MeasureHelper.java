@@ -21,45 +21,47 @@ import android.view.View.MeasureSpec;
 
 class MeasureHelper {
 
-    private static MeasureHelper sInstance = new MeasureHelper(null);
+	private static MeasureHelper sInstance = new MeasureHelper(null);
 
-    private GLView mComponent;
-    private int mPreferredWidth;
-    private int mPreferredHeight;
+	private GLView mComponent;
+	private int mPreferredWidth;
+	private int mPreferredHeight;
 
-    private MeasureHelper(GLView component) {
-        mComponent = component;
-    }
+	private MeasureHelper(final GLView component) {
+		mComponent = component;
+	}
 
-    public static MeasureHelper getInstance(GLView component) {
-        sInstance.mComponent = component;
-        return sInstance;
-    }
+	public void measure(final int widthSpec, final int heightSpec) {
+		final Rect p = mComponent.getPaddings();
+		setMeasuredSize(getLength(widthSpec, mPreferredWidth + p.left + p.right),
+				getLength(heightSpec, mPreferredHeight + p.top + p.bottom));
+	}
 
-    public MeasureHelper setPreferredContentSize(int width, int height) {
-        mPreferredWidth = width;
-        mPreferredHeight = height;
-        return this;
-    }
+	public MeasureHelper setPreferredContentSize(final int width, final int height) {
+		mPreferredWidth = width;
+		mPreferredHeight = height;
+		return this;
+	}
 
-    public void measure(int widthSpec, int heightSpec) {
-        Rect p = mComponent.getPaddings();
-        setMeasuredSize(
-                getLength(widthSpec, mPreferredWidth + p.left + p.right),
-                getLength(heightSpec, mPreferredHeight + p.top + p.bottom));
-    }
+	protected void setMeasuredSize(final int width, final int height) {
+		mComponent.setMeasuredSize(width, height);
+	}
 
-    private static int getLength(int measureSpec, int prefered) {
-        int specLength = MeasureSpec.getSize(measureSpec);
-        switch(MeasureSpec.getMode(measureSpec)) {
-            case MeasureSpec.EXACTLY: return specLength;
-            case MeasureSpec.AT_MOST: return Math.min(prefered, specLength);
-            default: return prefered;
-        }
-    }
+	public static MeasureHelper getInstance(final GLView component) {
+		sInstance.mComponent = component;
+		return sInstance;
+	}
 
-    protected void setMeasuredSize(int width, int height) {
-        mComponent.setMeasuredSize(width, height);
-    }
+	private static int getLength(final int measureSpec, final int prefered) {
+		final int specLength = MeasureSpec.getSize(measureSpec);
+		switch (MeasureSpec.getMode(measureSpec)) {
+			case MeasureSpec.EXACTLY:
+				return specLength;
+			case MeasureSpec.AT_MOST:
+				return Math.min(prefered, specLength);
+			default:
+				return prefered;
+		}
+	}
 
 }

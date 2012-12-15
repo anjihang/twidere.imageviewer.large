@@ -18,50 +18,49 @@ package org.mariotaku.gallery3d.data;
 
 import android.net.Uri;
 
-import java.util.ArrayList;
-
 public abstract class MediaSource {
-    private static final String TAG = "MediaSource";
-    private String mPrefix;
+	private static final String TAG = "MediaSource";
+	private final String mPrefix;
 
-    protected MediaSource(String prefix) {
-        mPrefix = prefix;
-    }
+	protected MediaSource(final String prefix) {
+		mPrefix = prefix;
+	}
 
-    public String getPrefix() {
-        return mPrefix;
-    }
+	public abstract MediaObject createMediaObject(Path path);
 
-    public Path findPathByUri(Uri uri, String type) {
-        return null;
-    }
+	public Path findPathByUri(final Uri uri, final String type) {
+		return null;
+	}
 
-    public abstract MediaObject createMediaObject(Path path);
+	public Path getDefaultSetOf(final Path item) {
+		return null;
+	}
 
-    public void pause() {
-    }
+	public String getPrefix() {
+		return mPrefix;
+	}
 
-    public void resume() {
-    }
+	public long getTotalTargetCacheSize() {
+		return 0;
+	}
 
-    public Path getDefaultSetOf(Path item) {
-        return null;
-    }
+	public long getTotalUsedCacheSize() {
+		return 0;
+	}
 
-    public long getTotalUsedCacheSize() {
-        return 0;
-    }
+	public void pause() {
+	}
 
-    public long getTotalTargetCacheSize() {
-        return 0;
-    }
+	public void resume() {
+	}
 
-    public static class PathId {
-        public PathId(Path path, int id) {
-            this.path = path;
-            this.id = id;
-        }
-        public Path path;
-        public int id;
-    }
+	public static class PathId {
+		public Path path;
+		public int id;
+
+		public PathId(final Path path, final int id) {
+			this.path = path;
+			this.id = id;
+		}
+	}
 }

@@ -20,36 +20,35 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewGroup.LayoutParams;
-import android.widget.RelativeLayout;
-
-import org.mariotaku.gallery3d.R;
 import android.widget.FrameLayout;
 import android.widget.ProgressBar;
+import android.widget.RelativeLayout;
 
 public class PhotoPageProgressBar {
-    private ViewGroup mContainer;
-    private View mProgress;
+	private final ViewGroup mContainer;
+	private final View mProgress;
 
-    public PhotoPageProgressBar(Context context, RelativeLayout parentLayout) {
-        LayoutInflater inflater = (LayoutInflater) context
-                .getSystemService(Context.LAYOUT_INFLATER_SERVICE);
-        //mContainer = (ViewGroup) inflater.inflate(R.layout.photopage_progress_bar, parentLayout,
-        //        false);
+	public PhotoPageProgressBar(final Context context, final RelativeLayout parentLayout) {
+		final LayoutInflater inflater = (LayoutInflater) context.getSystemService(Context.LAYOUT_INFLATER_SERVICE);
+		// mContainer = (ViewGroup)
+		// inflater.inflate(R.layout.photopage_progress_bar, parentLayout,
+		// false);
 		mContainer = new FrameLayout(context);
 		mProgress = new ProgressBar(context);
 		mContainer.addView(mProgress);
-        parentLayout.addView(mContainer);
-        //mProgress = mContainer.findViewById(R.id.photopage_progress_foreground);
-    }
+		parentLayout.addView(mContainer);
+		// mProgress =
+		// mContainer.findViewById(R.id.photopage_progress_foreground);
+	}
 
-    public void setProgress(int progressPercent) {
-        mContainer.setVisibility(View.VISIBLE);
-        LayoutParams layoutParams = mProgress.getLayoutParams();
-        layoutParams.width = mContainer.getWidth() * progressPercent / 100;
-        mProgress.setLayoutParams(layoutParams);
-    }
+	public void hideProgress() {
+		mContainer.setVisibility(View.INVISIBLE);
+	}
 
-    public void hideProgress() {
-        mContainer.setVisibility(View.INVISIBLE);
-    }
+	public void setProgress(final int progressPercent) {
+		mContainer.setVisibility(View.VISIBLE);
+		final LayoutParams layoutParams = mProgress.getLayoutParams();
+		layoutParams.width = mContainer.getWidth() * progressPercent / 100;
+		mProgress.setLayoutParams(layoutParams);
+	}
 }

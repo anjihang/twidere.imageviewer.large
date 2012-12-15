@@ -16,7 +16,8 @@
 
 package org.mariotaku.gallery3d.data;
 
-import android.content.Context;
+import java.io.IOException;
+import java.nio.ByteBuffer;
 
 import org.mariotaku.gallery3d.common.BlobCache;
 import org.mariotaku.gallery3d.common.BlobCache.LookupRequest;
@@ -25,98 +26,94 @@ import org.mariotaku.gallery3d.data.BytesBufferPool.BytesBuffer;
 import org.mariotaku.gallery3d.util.CacheManager;
 import org.mariotaku.gallery3d.util.GalleryUtils;
 
-import java.io.IOException;
-import java.nio.ByteBuffer;
+import android.content.Context;
 
 public class ImageCacheService {
-    @SuppressWarnings("unused")
-    private static final String TAG = "ImageCacheService";
+	@SuppressWarnings("unused")
+	private static final String TAG = "ImageCacheService";
 
-    private static final String IMAGE_CACHE_FILE = "imgcache";
-    private static final int IMAGE_CACHE_MAX_ENTRIES = 5000;
-    private static final int IMAGE_CACHE_MAX_BYTES = 200 * 1024 * 1024;
-    private static final int IMAGE_CACHE_VERSION = 7;
+	private static final String IMAGE_CACHE_FILE = "imgcache";
+	private static final int IMAGE_CACHE_MAX_ENTRIES = 5000;
+	private static final int IMAGE_CACHE_MAX_BYTES = 200 * 1024 * 1024;
+	private static final int IMAGE_CACHE_VERSION = 7;
 
-    private BlobCache mCache;
+	private final BlobCache mCache;
 
-    public ImageCacheService(Context context) {
-        mCache = CacheManager.getCache(context, IMAGE_CACHE_FILE,
-                IMAGE_CACHE_MAX_ENTRIES, IMAGE_CACHE_MAX_BYTES,
-                IMAGE_CACHE_VERSION);
-    }
+	public ImageCacheService(final Context context) {
+		mCache = CacheManager.getCache(context, IMAGE_CACHE_FILE, IMAGE_CACHE_MAX_ENTRIES, IMAGE_CACHE_MAX_BYTES,
+				IMAGE_CACHE_VERSION);
+	}
 
-    /**
-     * Gets the cached image data for the given <code>path</code> and <code>type</code>.
-     *
-     * The image data will be stored in <code>buffer.data</code>, started from
-     * <code>buffer.offset</code> for <code>buffer.length</code> bytes. If the
-     * buffer.data is not big enough, a new byte array will be allocated and returned.
-     *
-     * @return true if the image data is found; false if not found.
-     */
-    public boolean getImageData(Path path, int type, BytesBuffer buffer) {
-        byte[] key = makeKey(path, type);
-        long cacheKey = Utils.crc64Long(key);
-        try {
-            LookupRequest request = new LookupRequest();
-            request.key = cacheKey;
-            request.buffer = buffer.data;
-            synchronized (mCache) {
-                if (!mCache.lookup(request)) return false;
-            }
-            if (isSameKey(key, request.buffer)) {
-                buffer.data = request.buffer;
-                buffer.offset = key.length;
-                buffer.length = request.length - buffer.offset;
-                return true;
-            }
-        } catch (IOException ex) {
-            // ignore.
-        }
-        return false;
-    }
+	public void clearImageData(final Path path, final int type) {
+		final byte[] key = makeKey(path, type);
+		final long cacheKey = Utils.crc64Long(key);
+		synchronized (mCache) {
+			try {
+				mCache.clearEntry(cacheKey);
+			} catch (final IOException ex) {
+				// ignore.
+			}
+		}
+	}
 
-    public void putImageData(Path path, int type, byte[] value) {
-        byte[] key = makeKey(path, type);
-        long cacheKey = Utils.crc64Long(key);
-        ByteBuffer buffer = ByteBuffer.allocate(key.length + value.length);
-        buffer.put(key);
-        buffer.put(value);
-        synchronized (mCache) {
-            try {
-                mCache.insert(cacheKey, buffer.array());
-            } catch (IOException ex) {
-                // ignore.
-            }
-        }
-    }
+	/**
+	 * Gets the cached image data for the given <code>path</code> and
+	 * <code>type</code>.
+	 * 
+	 * The image data will be stored in <code>buffer.data</code>, started from
+	 * <code>buffer.offset</code> for <code>buffer.length</code> bytes. If the
+	 * buffer.data is not big enough, a new byte array will be allocated and
+	 * returned.
+	 * 
+	 * @return true if the image data is found; false if not found.
+	 */
+	public boolean getImageData(final Path path, final int type, final BytesBuffer buffer) {
+		final byte[] key = makeKey(path, type);
+		final long cacheKey = Utils.crc64Long(key);
+		try {
+			final LookupRequest request = new LookupRequest();
+			request.key = cacheKey;
+			request.buffer = buffer.data;
+			synchronized (mCache) {
+				if (!mCache.lookup(request)) return false;
+			}
+			if (isSameKey(key, request.buffer)) {
+				buffer.data = request.buffer;
+				buffer.offset = key.length;
+				buffer.length = request.length - buffer.offset;
+				return true;
+			}
+		} catch (final IOException ex) {
+			// ignore.
+		}
+		return false;
+	}
 
-    public void clearImageData(Path path, int type) {
-        byte[] key = makeKey(path, type);
-        long cacheKey = Utils.crc64Long(key);
-        synchronized (mCache) {
-            try {
-                mCache.clearEntry(cacheKey);
-            } catch (IOException ex) {
-                // ignore.
-            }
-        }
-    }
+	public void putImageData(final Path path, final int type, final byte[] value) {
+		final byte[] key = makeKey(path, type);
+		final long cacheKey = Utils.crc64Long(key);
+		final ByteBuffer buffer = ByteBuffer.allocate(key.length + value.length);
+		buffer.put(key);
+		buffer.put(value);
+		synchronized (mCache) {
+			try {
+				mCache.insert(cacheKey, buffer.array());
+			} catch (final IOException ex) {
+				// ignore.
+			}
+		}
+	}
 
-    private static byte[] makeKey(Path path, int type) {
-        return GalleryUtils.getBytes(path.toString() + "+" + type);
-    }
+	private static boolean isSameKey(final byte[] key, final byte[] buffer) {
+		final int n = key.length;
+		if (buffer.length < n) return false;
+		for (int i = 0; i < n; ++i) {
+			if (key[i] != buffer[i]) return false;
+		}
+		return true;
+	}
 
-    private static boolean isSameKey(byte[] key, byte[] buffer) {
-        int n = key.length;
-        if (buffer.length < n) {
-            return false;
-        }
-        for (int i = 0; i < n; ++i) {
-            if (key[i] != buffer[i]) {
-                return false;
-            }
-        }
-        return true;
-    }
+	private static byte[] makeKey(final Path path, final int type) {
+		return GalleryUtils.getBytes(path.toString() + "+" + type);
+	}
 }

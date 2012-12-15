@@ -16,67 +16,64 @@
 
 package org.mariotaku.gallery3d.ui;
 
-import android.graphics.Rect;
-
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+
+import android.graphics.Rect;
 
 // See "frameworks/base/include/utils/ResourceTypes.h" for the format of
 // NinePatch chunk.
 class NinePatchChunk {
 
-    public static final int NO_COLOR = 0x00000001;
-    public static final int TRANSPARENT_COLOR = 0x00000000;
+	public static final int NO_COLOR = 0x00000001;
+	public static final int TRANSPARENT_COLOR = 0x00000000;
 
-    public Rect mPaddings = new Rect();
+	public Rect mPaddings = new Rect();
 
-    public int mDivX[];
-    public int mDivY[];
-    public int mColor[];
+	public int mDivX[];
+	public int mDivY[];
+	public int mColor[];
 
-    private static void readIntArray(int[] data, ByteBuffer buffer) {
-        for (int i = 0, n = data.length; i < n; ++i) {
-            data[i] = buffer.getInt();
-        }
-    }
+	public static NinePatchChunk deserialize(final byte[] data) {
+		final ByteBuffer byteBuffer = ByteBuffer.wrap(data).order(ByteOrder.nativeOrder());
 
-    private static void checkDivCount(int length) {
-        if (length == 0 || (length & 0x01) != 0) {
-            throw new RuntimeException("invalid nine-patch: " + length);
-        }
-    }
+		final byte wasSerialized = byteBuffer.get();
+		if (wasSerialized == 0) return null;
 
-    public static NinePatchChunk deserialize(byte[] data) {
-        ByteBuffer byteBuffer =
-                ByteBuffer.wrap(data).order(ByteOrder.nativeOrder());
+		final NinePatchChunk chunk = new NinePatchChunk();
+		chunk.mDivX = new int[byteBuffer.get()];
+		chunk.mDivY = new int[byteBuffer.get()];
+		chunk.mColor = new int[byteBuffer.get()];
 
-        byte wasSerialized = byteBuffer.get();
-        if (wasSerialized == 0) return null;
+		checkDivCount(chunk.mDivX.length);
+		checkDivCount(chunk.mDivY.length);
 
-        NinePatchChunk chunk = new NinePatchChunk();
-        chunk.mDivX = new int[byteBuffer.get()];
-        chunk.mDivY = new int[byteBuffer.get()];
-        chunk.mColor = new int[byteBuffer.get()];
+		// skip 8 bytes
+		byteBuffer.getInt();
+		byteBuffer.getInt();
 
-        checkDivCount(chunk.mDivX.length);
-        checkDivCount(chunk.mDivY.length);
+		chunk.mPaddings.left = byteBuffer.getInt();
+		chunk.mPaddings.right = byteBuffer.getInt();
+		chunk.mPaddings.top = byteBuffer.getInt();
+		chunk.mPaddings.bottom = byteBuffer.getInt();
 
-        // skip 8 bytes
-        byteBuffer.getInt();
-        byteBuffer.getInt();
+		// skip 4 bytes
+		byteBuffer.getInt();
 
-        chunk.mPaddings.left = byteBuffer.getInt();
-        chunk.mPaddings.right = byteBuffer.getInt();
-        chunk.mPaddings.top = byteBuffer.getInt();
-        chunk.mPaddings.bottom = byteBuffer.getInt();
+		readIntArray(chunk.mDivX, byteBuffer);
+		readIntArray(chunk.mDivY, byteBuffer);
+		readIntArray(chunk.mColor, byteBuffer);
 
-        // skip 4 bytes
-        byteBuffer.getInt();
+		return chunk;
+	}
 
-        readIntArray(chunk.mDivX, byteBuffer);
-        readIntArray(chunk.mDivY, byteBuffer);
-        readIntArray(chunk.mColor, byteBuffer);
+	private static void checkDivCount(final int length) {
+		if (length == 0 || (length & 0x01) != 0) throw new RuntimeException("invalid nine-patch: " + length);
+	}
 
-        return chunk;
-    }
+	private static void readIntArray(final int[] data, final ByteBuffer buffer) {
+		for (int i = 0, n = data.length; i < n; ++i) {
+			data[i] = buffer.getInt();
+		}
+	}
 }

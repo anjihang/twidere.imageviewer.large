@@ -16,26 +16,26 @@
 
 package org.mariotaku.gallery3d.ui;
 
+import org.mariotaku.gallery3d.common.Utils;
+
 import android.os.Handler;
 import android.os.Message;
 
-import org.mariotaku.gallery3d.common.Utils;
-
 public class SynchronizedHandler extends Handler {
 
-    private final GLRoot mRoot;
+	private final GLRoot mRoot;
 
-    public SynchronizedHandler(GLRoot root) {
-        mRoot = Utils.checkNotNull(root);
-    }
+	public SynchronizedHandler(final GLRoot root) {
+		mRoot = Utils.checkNotNull(root);
+	}
 
-    @Override
-    public void dispatchMessage(Message message) {
-        mRoot.lockRenderThread();
-        try {
-            super.dispatchMessage(message);
-        } finally {
-            mRoot.unlockRenderThread();
-        }
-    }
+	@Override
+	public void dispatchMessage(final Message message) {
+		mRoot.lockRenderThread();
+		try {
+			super.dispatchMessage(message);
+		} finally {
+			mRoot.unlockRenderThread();
+		}
+	}
 }

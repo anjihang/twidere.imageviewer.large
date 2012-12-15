@@ -17,12 +17,12 @@
 package org.mariotaku.gallery3d.data;
 
 public final class DataSourceType {
-    public static final int TYPE_NOT_CATEGORIZED = 0;
-    public static final int TYPE_LOCAL = 1;
-    public static final int TYPE_PICASA = 2;
-    public static final int TYPE_MTP = 3;
-    public static final int TYPE_CAMERA = 4;
+	public static final int TYPE_NOT_CATEGORIZED = 0;
+	public static final int TYPE_LOCAL = 1;
+	public static final int TYPE_PICASA = 2;
+	public static final int TYPE_MTP = 3;
+	public static final int TYPE_CAMERA = 4;
 
-    private static final Path LOCAL_ROOT = Path.fromString("/local");
+	private static final Path LOCAL_ROOT = Path.fromString("/local");
 
 }

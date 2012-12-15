@@ -16,75 +16,76 @@
 
 package org.mariotaku.gallery3d.ui;
 
-import android.content.Context;
-import android.os.StatFs;
+import java.io.File;
 
 import org.mariotaku.gallery3d.app.AbstractGalleryActivity;
 import org.mariotaku.gallery3d.util.ThreadPool.JobContext;
 
-import java.io.File;
+import android.content.Context;
+import android.os.StatFs;
 
 public class CacheStorageUsageInfo {
-    @SuppressWarnings("unused")
-    private static final String TAG = "CacheStorageUsageInfo";
+	@SuppressWarnings("unused")
+	private static final String TAG = "CacheStorageUsageInfo";
 
-    // number of bytes the storage has.
-    private long mTotalBytes;
+	// number of bytes the storage has.
+	private long mTotalBytes;
 
-    // number of bytes already used.
-    private long mUsedBytes;
+	// number of bytes already used.
+	private long mUsedBytes;
 
-    // number of bytes used for the cache (should be less then usedBytes).
-    private long mUsedCacheBytes;
+	// number of bytes used for the cache (should be less then usedBytes).
+	private long mUsedCacheBytes;
 
-    // number of bytes used for the cache if all pending downloads (and removals) are completed.
-    private long mTargetCacheBytes;
+	// number of bytes used for the cache if all pending downloads (and
+	// removals) are completed.
+	private long mTargetCacheBytes;
 
-    private AbstractGalleryActivity mActivity;
-    private Context mContext;
-    private long mUserChangeDelta;
+	private final AbstractGalleryActivity mActivity;
+	private final Context mContext;
+	private long mUserChangeDelta;
 
-    public CacheStorageUsageInfo(AbstractGalleryActivity activity) {
-        mActivity = activity;
-        mContext = activity.getAndroidContext();
-    }
+	public CacheStorageUsageInfo(final AbstractGalleryActivity activity) {
+		mActivity = activity;
+		mContext = activity.getAndroidContext();
+	}
 
-    public void increaseTargetCacheSize(long delta) {
-        mUserChangeDelta += delta;
-    }
+	public long getExpectedUsedBytes() {
+		return mUsedBytes - mUsedCacheBytes + mTargetCacheBytes + mUserChangeDelta;
+	}
 
-    public void loadStorageInfo(JobContext jc) {
-        File cacheDir = mContext.getExternalCacheDir();
-        if (cacheDir == null) {
-            cacheDir = mContext.getCacheDir();
-        }
+	public long getFreeBytes() {
+		return mTotalBytes - mUsedBytes;
+	}
 
-        String path = cacheDir.getAbsolutePath();
-        StatFs stat = new StatFs(path);
-        long blockSize = stat.getBlockSize();
-        long availableBlocks = stat.getAvailableBlocks();
-        long totalBlocks = stat.getBlockCount();
+	public long getTotalBytes() {
+		return mTotalBytes;
+	}
 
-        mTotalBytes = blockSize * totalBlocks;
-        mUsedBytes = blockSize * (totalBlocks - availableBlocks);
-        mUsedCacheBytes = mActivity.getDataManager().getTotalUsedCacheSize();
-        mTargetCacheBytes = mActivity.getDataManager().getTotalTargetCacheSize();
-    }
+	public long getUsedBytes() {
+		// Should it be usedBytes - usedCacheBytes + targetCacheBytes ?
+		return mUsedBytes;
+	}
 
-    public long getTotalBytes() {
-        return mTotalBytes;
-    }
+	public void increaseTargetCacheSize(final long delta) {
+		mUserChangeDelta += delta;
+	}
 
-    public long getExpectedUsedBytes() {
-        return mUsedBytes - mUsedCacheBytes + mTargetCacheBytes + mUserChangeDelta;
-    }
+	public void loadStorageInfo(final JobContext jc) {
+		File cacheDir = mContext.getExternalCacheDir();
+		if (cacheDir == null) {
+			cacheDir = mContext.getCacheDir();
+		}
 
-    public long getUsedBytes() {
-        // Should it be usedBytes - usedCacheBytes + targetCacheBytes ?
-        return mUsedBytes;
-    }
+		final String path = cacheDir.getAbsolutePath();
+		final StatFs stat = new StatFs(path);
+		final long blockSize = stat.getBlockSize();
+		final long availableBlocks = stat.getAvailableBlocks();
+		final long totalBlocks = stat.getBlockCount();
 
-    public long getFreeBytes() {
-        return mTotalBytes - mUsedBytes;
-    }
+		mTotalBytes = blockSize * totalBlocks;
+		mUsedBytes = blockSize * (totalBlocks - availableBlocks);
+		mUsedCacheBytes = mActivity.getDataManager().getTotalUsedCacheSize();
+		mTargetCacheBytes = mActivity.getDataManager().getTotalTargetCacheSize();
+	}
 }

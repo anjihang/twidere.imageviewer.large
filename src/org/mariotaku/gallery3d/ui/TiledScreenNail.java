@@ -16,12 +16,12 @@
 
 package org.mariotaku.gallery3d.ui;
 
-import android.graphics.Bitmap;
-import android.graphics.RectF;
-
 import org.mariotaku.gallery3d.common.Utils;
 import org.mariotaku.gallery3d.data.BitmapPool;
 import org.mariotaku.gallery3d.data.MediaItem;
+
+import android.graphics.Bitmap;
+import android.graphics.RectF;
 
 // This is a ScreenNail wraps a Bitmap. There are some extra functions:
 //
@@ -31,190 +31,189 @@ import org.mariotaku.gallery3d.data.MediaItem;
 // - When the the bitmap is available, and we have drawn the placeholder color
 // before, we will do a fade-in animation.
 public class TiledScreenNail implements ScreenNail {
-    @SuppressWarnings("unused")
-    private static final String TAG = "TiledScreenNail";
+	@SuppressWarnings("unused")
+	private static final String TAG = "TiledScreenNail";
 
-    // The duration of the fading animation in milliseconds
-    private static final int DURATION = 180;
+	// The duration of the fading animation in milliseconds
+	private static final int DURATION = 180;
 
-    private static int sMaxSide = 640;
+	private static int sMaxSide = 640;
 
-    // These are special values for mAnimationStartTime
-    private static final long ANIMATION_NOT_NEEDED = -1;
-    private static final long ANIMATION_NEEDED = -2;
-    private static final long ANIMATION_DONE = -3;
+	// These are special values for mAnimationStartTime
+	private static final long ANIMATION_NOT_NEEDED = -1;
+	private static final long ANIMATION_NEEDED = -2;
+	private static final long ANIMATION_DONE = -3;
 
-    private int mWidth;
-    private int mHeight;
-    private long mAnimationStartTime = ANIMATION_NOT_NEEDED;
+	private int mWidth;
+	private int mHeight;
+	private long mAnimationStartTime = ANIMATION_NOT_NEEDED;
 
-    private Bitmap mBitmap;
-    private TiledTexture mTexture;
+	private Bitmap mBitmap;
+	private TiledTexture mTexture;
 
-    public TiledScreenNail(Bitmap bitmap) {
-        mWidth = bitmap.getWidth();
-        mHeight = bitmap.getHeight();
-        mBitmap = bitmap;
-        mTexture = new TiledTexture(bitmap);
-    }
+	// This gets overridden by bitmap_screennail_placeholder
+	// in GalleryUtils.initialize
+	private static int mPlaceholderColor = 0xFF222222;
 
-    public TiledScreenNail(int width, int height) {
-        setSize(width, height);
-    }
+	private static boolean mDrawPlaceholder = true;
 
-    // This gets overridden by bitmap_screennail_placeholder
-    // in GalleryUtils.initialize
-    private static int mPlaceholderColor = 0xFF222222;
-    private static boolean mDrawPlaceholder = true;
+	public TiledScreenNail(final Bitmap bitmap) {
+		mWidth = bitmap.getWidth();
+		mHeight = bitmap.getHeight();
+		mBitmap = bitmap;
+		mTexture = new TiledTexture(bitmap);
+	}
 
-    public static void setPlaceholderColor(int color) {
-        mPlaceholderColor = color;
-    }
+	public TiledScreenNail(final int width, final int height) {
+		setSize(width, height);
+	}
 
-    private void setSize(int width, int height) {
-        if (width == 0 || height == 0) {
-            width = sMaxSide;
-            height = sMaxSide * 3 / 4;
-        }
-        float scale = Math.min(1, (float) sMaxSide / Math.max(width, height));
-        mWidth = Math.round(scale * width);
-        mHeight = Math.round(scale * height);
-    }
+	// Combines the two ScreenNails.
+	// Returns the used one and recycle the unused one.
+	public ScreenNail combine(final ScreenNail other) {
+		if (other == null) return this;
 
-    private static void recycleBitmap(BitmapPool pool, Bitmap bitmap) {
-        if (pool == null || bitmap == null) return;
-        pool.recycle(bitmap);
-    }
+		if (!(other instanceof TiledScreenNail)) {
+			recycle();
+			return other;
+		}
 
-    // Combines the two ScreenNails.
-    // Returns the used one and recycle the unused one.
-    public ScreenNail combine(ScreenNail other) {
-        if (other == null) {
-            return this;
-        }
+		// Now both are TiledScreenNail. Move over the information about width,
+		// height, and Bitmap, then recycle the other.
+		final TiledScreenNail newer = (TiledScreenNail) other;
+		mWidth = newer.mWidth;
+		mHeight = newer.mHeight;
+		if (newer.mTexture != null) {
+			recycleBitmap(MediaItem.getThumbPool(), mBitmap);
+			if (mTexture != null) {
+				mTexture.recycle();
+			}
+			mBitmap = newer.mBitmap;
+			mTexture = newer.mTexture;
+			newer.mBitmap = null;
+			newer.mTexture = null;
+		}
+		newer.recycle();
+		return this;
+	}
 
-        if (!(other instanceof TiledScreenNail)) {
-            recycle();
-            return other;
-        }
+	@Override
+	public void draw(final GLCanvas canvas, final int x, final int y, final int width, final int height) {
+		if (mTexture == null || !mTexture.isReady()) {
+			if (mAnimationStartTime == ANIMATION_NOT_NEEDED) {
+				mAnimationStartTime = ANIMATION_NEEDED;
+			}
+			if (mDrawPlaceholder) {
+				canvas.fillRect(x, y, width, height, mPlaceholderColor);
+			}
+			return;
+		}
 
-        // Now both are TiledScreenNail. Move over the information about width,
-        // height, and Bitmap, then recycle the other.
-        TiledScreenNail newer = (TiledScreenNail) other;
-        mWidth = newer.mWidth;
-        mHeight = newer.mHeight;
-        if (newer.mTexture != null) {
-            recycleBitmap(MediaItem.getThumbPool(), mBitmap);
-            if (mTexture != null) mTexture.recycle();
-            mBitmap = newer.mBitmap;
-            mTexture = newer.mTexture;
-            newer.mBitmap = null;
-            newer.mTexture = null;
-        }
-        newer.recycle();
-        return this;
-    }
+		if (mAnimationStartTime == ANIMATION_NEEDED) {
+			mAnimationStartTime = AnimationTime.get();
+		}
 
-    public void updatePlaceholderSize(int width, int height) {
-        if (mBitmap != null) return;
-        if (width == 0 || height == 0) return;
-        setSize(width, height);
-    }
+		if (isAnimating()) {
+			mTexture.drawMixed(canvas, mPlaceholderColor, getRatio(), x, y, width, height);
+		} else {
+			mTexture.draw(canvas, x, y, width, height);
+		}
+	}
 
-    @Override
-    public int getWidth() {
-        return mWidth;
-    }
+	@Override
+	public void draw(final GLCanvas canvas, final RectF source, final RectF dest) {
+		if (mTexture == null || !mTexture.isReady()) {
+			canvas.fillRect(dest.left, dest.top, dest.width(), dest.height(), mPlaceholderColor);
+			return;
+		}
 
-    @Override
-    public int getHeight() {
-        return mHeight;
-    }
+		mTexture.draw(canvas, source, dest);
+	}
 
-    @Override
-    public void noDraw() {
-    }
+	@Override
+	public int getHeight() {
+		return mHeight;
+	}
 
-    @Override
-    public void recycle() {
-        if (mTexture != null) {
-            mTexture.recycle();
-            mTexture = null;
-        }
-        recycleBitmap(MediaItem.getThumbPool(), mBitmap);
-        mBitmap = null;
-    }
+	public TiledTexture getTexture() {
+		return mTexture;
+	}
 
-    public static void disableDrawPlaceholder() {
-        mDrawPlaceholder = false;
-    }
+	@Override
+	public int getWidth() {
+		return mWidth;
+	}
 
-    public static void enableDrawPlaceholder() {
-        mDrawPlaceholder = true;
-    }
+	public boolean isAnimating() {
+		// The TiledTexture may not be uploaded completely yet.
+		// In that case, we count it as animating state and we will draw
+		// the placeholder in TileImageView.
+		if (mTexture == null || !mTexture.isReady()) return true;
+		if (mAnimationStartTime < 0) return false;
+		if (AnimationTime.get() - mAnimationStartTime >= DURATION) {
+			mAnimationStartTime = ANIMATION_DONE;
+			return false;
+		}
+		return true;
+	}
 
-    @Override
-    public void draw(GLCanvas canvas, int x, int y, int width, int height) {
-        if (mTexture == null || !mTexture.isReady()) {
-            if (mAnimationStartTime == ANIMATION_NOT_NEEDED) {
-                mAnimationStartTime = ANIMATION_NEEDED;
-            }
-            if(mDrawPlaceholder) {
-                canvas.fillRect(x, y, width, height, mPlaceholderColor);
-            }
-            return;
-        }
+	public boolean isShowingPlaceholder() {
+		return mBitmap == null || isAnimating();
+	}
 
-        if (mAnimationStartTime == ANIMATION_NEEDED) {
-            mAnimationStartTime = AnimationTime.get();
-        }
+	@Override
+	public void noDraw() {
+	}
 
-        if (isAnimating()) {
-            mTexture.drawMixed(canvas, mPlaceholderColor, getRatio(), x, y,
-                    width, height);
-        } else {
-            mTexture.draw(canvas, x, y, width, height);
-        }
-    }
+	@Override
+	public void recycle() {
+		if (mTexture != null) {
+			mTexture.recycle();
+			mTexture = null;
+		}
+		recycleBitmap(MediaItem.getThumbPool(), mBitmap);
+		mBitmap = null;
+	}
 
-    @Override
-    public void draw(GLCanvas canvas, RectF source, RectF dest) {
-        if (mTexture == null || !mTexture.isReady()) {
-            canvas.fillRect(dest.left, dest.top, dest.width(), dest.height(),
-                    mPlaceholderColor);
-            return;
-        }
+	public void updatePlaceholderSize(final int width, final int height) {
+		if (mBitmap != null) return;
+		if (width == 0 || height == 0) return;
+		setSize(width, height);
+	}
 
-        mTexture.draw(canvas, source, dest);
-    }
+	private float getRatio() {
+		final float r = (float) (AnimationTime.get() - mAnimationStartTime) / DURATION;
+		return Utils.clamp(1.0f - r, 0.0f, 1.0f);
+	}
 
-    public boolean isAnimating() {
-        // The TiledTexture may not be uploaded completely yet.
-        // In that case, we count it as animating state and we will draw
-        // the placeholder in TileImageView.
-        if (mTexture == null || !mTexture.isReady()) return true;
-        if (mAnimationStartTime < 0) return false;
-        if (AnimationTime.get() - mAnimationStartTime >= DURATION) {
-            mAnimationStartTime = ANIMATION_DONE;
-            return false;
-        }
-        return true;
-    }
+	private void setSize(int width, int height) {
+		if (width == 0 || height == 0) {
+			width = sMaxSide;
+			height = sMaxSide * 3 / 4;
+		}
+		final float scale = Math.min(1, (float) sMaxSide / Math.max(width, height));
+		mWidth = Math.round(scale * width);
+		mHeight = Math.round(scale * height);
+	}
 
-    private float getRatio() {
-        float r = (float) (AnimationTime.get() - mAnimationStartTime) / DURATION;
-        return Utils.clamp(1.0f - r, 0.0f, 1.0f);
-    }
+	public static void disableDrawPlaceholder() {
+		mDrawPlaceholder = false;
+	}
 
-    public boolean isShowingPlaceholder() {
-        return (mBitmap == null) || isAnimating();
-    }
+	public static void enableDrawPlaceholder() {
+		mDrawPlaceholder = true;
+	}
 
-    public TiledTexture getTexture() {
-        return mTexture;
-    }
+	public static void setMaxSide(final int size) {
+		sMaxSide = size;
+	}
 
-    public static void setMaxSide(int size) {
-        sMaxSide = size;
-    }
+	public static void setPlaceholderColor(final int color) {
+		mPlaceholderColor = color;
+	}
+
+	private static void recycleBitmap(final BitmapPool pool, final Bitmap bitmap) {
+		if (pool == null || bitmap == null) return;
+		pool.recycle(bitmap);
+	}
 }

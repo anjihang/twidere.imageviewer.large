@@ -17,26 +17,26 @@
 package org.mariotaku.gallery3d.ui;
 
 public class RelativePosition {
-    private float mAbsoluteX;
-    private float mAbsoluteY;
-    private float mReferenceX;
-    private float mReferenceY;
+	private float mAbsoluteX;
+	private float mAbsoluteY;
+	private float mReferenceX;
+	private float mReferenceY;
 
-    public void setAbsolutePosition(int absoluteX, int absoluteY) {
-        mAbsoluteX = absoluteX;
-        mAbsoluteY = absoluteY;
-    }
+	public float getX() {
+		return mAbsoluteX - mReferenceX;
+	}
 
-    public void setReferencePosition(int x, int y) {
-        mReferenceX = x;
-        mReferenceY = y;
-    }
+	public float getY() {
+		return mAbsoluteY - mReferenceY;
+	}
 
-    public float getX() {
-        return mAbsoluteX - mReferenceX;
-    }
+	public void setAbsolutePosition(final int absoluteX, final int absoluteY) {
+		mAbsoluteX = absoluteX;
+		mAbsoluteY = absoluteY;
+	}
 
-    public float getY() {
-        return mAbsoluteY - mReferenceY;
-    }
+	public void setReferencePosition(final int x, final int y) {
+		mReferenceX = x;
+		mReferenceY = y;
+	}
 }

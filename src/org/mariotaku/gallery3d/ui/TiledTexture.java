@@ -16,6 +16,11 @@
 
 package org.mariotaku.gallery3d.ui;
 
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+
+import org.mariotaku.gallery3d.ui.GLRoot.OnGLIdleListener;
+
 import android.graphics.Bitmap;
 import android.graphics.Bitmap.Config;
 import android.graphics.Canvas;
@@ -26,311 +31,312 @@ import android.graphics.PorterDuffXfermode;
 import android.graphics.RectF;
 import android.os.SystemClock;
 
-import org.mariotaku.gallery3d.ui.GLRoot.OnGLIdleListener;
-
-import java.util.ArrayDeque;
-import java.util.ArrayList;
-
 // This class is similar to BitmapTexture, except the bitmap is
 // split into tiles. By doing so, we may increase the time required to
 // upload the whole bitmap but we reduce the time of uploading each tile
 // so it make the animation more smooth and prevents jank.
 public class TiledTexture implements Texture {
-    private static final int CONTENT_SIZE = 254;
-    private static final int BORDER_SIZE = 1;
-    private static final int TILE_SIZE = CONTENT_SIZE + 2 * BORDER_SIZE;
-    private static final int INIT_CAPACITY = 8;
+	private static final int CONTENT_SIZE = 254;
+	private static final int BORDER_SIZE = 1;
+	private static final int TILE_SIZE = CONTENT_SIZE + 2 * BORDER_SIZE;
+	private static final int INIT_CAPACITY = 8;
 
-    // We are targeting at 60fps, so we have 16ms for each frame.
-    // In this 16ms, we use about 4~8 ms to upload tiles.
-    private static final long UPLOAD_TILE_LIMIT = 4; // ms
+	// We are targeting at 60fps, so we have 16ms for each frame.
+	// In this 16ms, we use about 4~8 ms to upload tiles.
+	private static final long UPLOAD_TILE_LIMIT = 4; // ms
 
-    private static Tile sFreeTileHead = null;
-    private static final Object sFreeTileLock = new Object();
+	private static Tile sFreeTileHead = null;
+	private static final Object sFreeTileLock = new Object();
 
-    private static Bitmap sUploadBitmap;
-    private static Canvas sCanvas;
-    private static Paint sBitmapPaint;
-    private static Paint sPaint;
+	private static Bitmap sUploadBitmap;
+	private static Canvas sCanvas;
+	private static Paint sBitmapPaint;
+	private static Paint sPaint;
 
-    private int mUploadIndex = 0;
+	private int mUploadIndex = 0;
 
-    private final Tile[] mTiles;
-    private final int mWidth;
-    private final int mHeight;
-    private final RectF mSrcRect = new RectF();
-    private final RectF mDestRect = new RectF();
+	private final Tile[] mTiles;
+	private final int mWidth;
+	private final int mHeight;
+	private final RectF mSrcRect = new RectF();
+	private final RectF mDestRect = new RectF();
 
-    public static class Uploader implements OnGLIdleListener {
-        private final ArrayDeque<TiledTexture> mTextures =
-                new ArrayDeque<TiledTexture>(INIT_CAPACITY);
+	public TiledTexture(final Bitmap bitmap) {
+		mWidth = bitmap.getWidth();
+		mHeight = bitmap.getHeight();
+		final ArrayList<Tile> list = new ArrayList<Tile>();
 
-        private final GLRoot mGlRoot;
-        private boolean mIsQueued = false;
+		for (int x = 0, w = mWidth; x < w; x += CONTENT_SIZE) {
+			for (int y = 0, h = mHeight; y < h; y += CONTENT_SIZE) {
+				final Tile tile = obtainTile();
+				tile.offsetX = x;
+				tile.offsetY = y;
+				tile.bitmap = bitmap;
+				tile.setSize(Math.min(CONTENT_SIZE, mWidth - x), Math.min(CONTENT_SIZE, mHeight - y));
+				list.add(tile);
+			}
+		}
+		mTiles = list.toArray(new Tile[list.size()]);
+	}
 
-        public Uploader(GLRoot glRoot) {
-            mGlRoot = glRoot;
-        }
+	@Override
+	public void draw(final GLCanvas canvas, final int x, final int y) {
+		draw(canvas, x, y, mWidth, mHeight);
+	}
 
-        public synchronized void clear() {
-            mTextures.clear();
-        }
+	// Draws the texture on to the specified rectangle.
+	@Override
+	public void draw(final GLCanvas canvas, final int x, final int y, final int width, final int height) {
+		final RectF src = mSrcRect;
+		final RectF dest = mDestRect;
+		final float scaleX = (float) width / mWidth;
+		final float scaleY = (float) height / mHeight;
+		for (int i = 0, n = mTiles.length; i < n; ++i) {
+			final Tile t = mTiles[i];
+			src.set(0, 0, t.contentWidth, t.contentHeight);
+			src.offset(t.offsetX, t.offsetY);
+			mapRect(dest, src, 0, 0, x, y, scaleX, scaleY);
+			src.offset(BORDER_SIZE - t.offsetX, BORDER_SIZE - t.offsetY);
+			canvas.drawTexture(t, mSrcRect, mDestRect);
+		}
+	}
 
-        public synchronized void addTexture(TiledTexture t) {
-            if (t.isReady()) return;
-            mTextures.addLast(t);
+	// Draws a sub region of this texture on to the specified rectangle.
+	public void draw(final GLCanvas canvas, final RectF source, final RectF target) {
+		final RectF src = mSrcRect;
+		final RectF dest = mDestRect;
+		final float x0 = source.left;
+		final float y0 = source.top;
+		final float x = target.left;
+		final float y = target.top;
+		final float scaleX = target.width() / source.width();
+		final float scaleY = target.height() / source.height();
 
-            if (mIsQueued) return;
-            mIsQueued = true;
-            mGlRoot.addOnGLIdleListener(this);
-        }
+		for (int i = 0, n = mTiles.length; i < n; ++i) {
+			final Tile t = mTiles[i];
+			src.set(0, 0, t.contentWidth, t.contentHeight);
+			src.offset(t.offsetX, t.offsetY);
+			if (!src.intersect(source)) {
+				continue;
+			}
+			mapRect(dest, src, x0, y0, x, y, scaleX, scaleY);
+			src.offset(BORDER_SIZE - t.offsetX, BORDER_SIZE - t.offsetY);
+			canvas.drawTexture(t, src, dest);
+		}
+	}
 
-        @Override
-        public boolean onGLIdle(GLCanvas canvas, boolean renderRequested) {
-            ArrayDeque<TiledTexture> deque = mTextures;
-            synchronized (this) {
-                long now = SystemClock.uptimeMillis();
-                long dueTime = now + UPLOAD_TILE_LIMIT;
-                while(now < dueTime && !deque.isEmpty()) {
-                    TiledTexture t = deque.peekFirst();
-                    if (t.uploadNextTile(canvas)) {
-                        deque.removeFirst();
-                        mGlRoot.requestRender();
-                    }
-                    now = SystemClock.uptimeMillis();
-                }
-                mIsQueued = !mTextures.isEmpty();
+	// Draws a mixed color of this texture and a specified color onto the
+	// a rectangle. The used color is: from * (1 - ratio) + to * ratio.
+	public void drawMixed(final GLCanvas canvas, final int color, final float ratio, final int x, final int y,
+			final int width, final int height) {
+		final RectF src = mSrcRect;
+		final RectF dest = mDestRect;
+		final float scaleX = (float) width / mWidth;
+		final float scaleY = (float) height / mHeight;
+		for (int i = 0, n = mTiles.length; i < n; ++i) {
+			final Tile t = mTiles[i];
+			src.set(0, 0, t.contentWidth, t.contentHeight);
+			src.offset(t.offsetX, t.offsetY);
+			mapRect(dest, src, 0, 0, x, y, scaleX, scaleY);
+			src.offset(BORDER_SIZE - t.offsetX, BORDER_SIZE - t.offsetY);
+			canvas.drawMixed(t, color, ratio, mSrcRect, mDestRect);
+		}
+	}
 
-                // return true to keep this listener in the queue
-                return mIsQueued;
-            }
-        }
-    }
+	@Override
+	public int getHeight() {
+		return mHeight;
+	}
 
-    private static class Tile extends UploadedTexture {
-        public int offsetX;
-        public int offsetY;
-        public Bitmap bitmap;
-        public Tile nextFreeTile;
-        public int contentWidth;
-        public int contentHeight;
+	@Override
+	public int getWidth() {
+		return mWidth;
+	}
 
-        @Override
-        public void setSize(int width, int height) {
-            contentWidth = width;
-            contentHeight = height;
-            mWidth = width + 2 * BORDER_SIZE;
-            mHeight = height + 2 * BORDER_SIZE;
-            mTextureWidth = TILE_SIZE;
-            mTextureHeight = TILE_SIZE;
-        }
+	@Override
+	public boolean isOpaque() {
+		return false;
+	}
 
-        @Override
-        protected Bitmap onGetBitmap() {
-            int x = BORDER_SIZE - offsetX;
-            int y = BORDER_SIZE - offsetY;
-            int r = bitmap.getWidth() + x;
-            int b = bitmap.getHeight() + y ;
-            sCanvas.drawBitmap(bitmap, x, y, sBitmapPaint);
-            bitmap = null;
+	public boolean isReady() {
+		return mUploadIndex == mTiles.length;
+	}
 
-            // draw borders if need
-            if (x > 0) sCanvas.drawLine(x - 1, 0, x - 1, TILE_SIZE, sPaint);
-            if (y > 0) sCanvas.drawLine(0, y - 1, TILE_SIZE, y - 1, sPaint);
-            if (r < CONTENT_SIZE) sCanvas.drawLine(r, 0, r, TILE_SIZE, sPaint);
-            if (b < CONTENT_SIZE) sCanvas.drawLine(0, b, TILE_SIZE, b, sPaint);
+	public void recycle() {
+		for (int i = 0, n = mTiles.length; i < n; ++i) {
+			freeTile(mTiles[i]);
+		}
+	}
 
-            return sUploadBitmap;
-        }
+	private boolean uploadNextTile(final GLCanvas canvas) {
+		if (mUploadIndex == mTiles.length) return true;
 
-        @Override
-        protected void onFreeBitmap(Bitmap bitmap) {
-            // do nothing
-        }
-    }
+		final Tile next = mTiles[mUploadIndex++];
 
-    private static void freeTile(Tile tile) {
-        tile.invalidateContent();
-        tile.bitmap = null;
-        synchronized (sFreeTileLock) {
-            tile.nextFreeTile = sFreeTileHead;
-            sFreeTileHead = tile;
-        }
-    }
+		// Make sure tile has not already been recycled by the time
+		// this is called (race condition in onGLIdle)
+		if (next.bitmap != null) {
+			final boolean hasBeenLoad = next.isLoaded();
+			next.updateContent(canvas);
 
-    private static Tile obtainTile() {
-        synchronized (sFreeTileLock) {
-            Tile result = sFreeTileHead;
-            if (result == null) return new Tile();
-            sFreeTileHead = result.nextFreeTile;
-            result.nextFreeTile = null;
-            return result;
-        }
-    }
+			// It will take some time for a texture to be drawn for the first
+			// time. When scrolling, we need to draw several tiles on the screen
+			// at the same time. It may cause a UI jank even these textures has
+			// been uploaded.
+			if (!hasBeenLoad) {
+				next.draw(canvas, 0, 0);
+			}
+		}
+		return mUploadIndex == mTiles.length;
+	}
 
-    private boolean uploadNextTile(GLCanvas canvas) {
-        if (mUploadIndex == mTiles.length) return true;
+	public static void freeResources() {
+		sUploadBitmap = null;
+		sCanvas = null;
+		sBitmapPaint = null;
+		sPaint = null;
+	}
 
-        Tile next = mTiles[mUploadIndex++];
+	public static void prepareResources() {
+		sUploadBitmap = Bitmap.createBitmap(TILE_SIZE, TILE_SIZE, Config.ARGB_8888);
+		sCanvas = new Canvas(sUploadBitmap);
+		sBitmapPaint = new Paint(Paint.FILTER_BITMAP_FLAG);
+		sBitmapPaint.setXfermode(new PorterDuffXfermode(Mode.SRC));
+		sPaint = new Paint();
+		sPaint.setXfermode(new PorterDuffXfermode(Mode.SRC));
+		sPaint.setColor(Color.TRANSPARENT);
+	}
 
-        // Make sure tile has not already been recycled by the time
-        // this is called (race condition in onGLIdle)
-        if (next.bitmap != null) {
-            boolean hasBeenLoad = next.isLoaded();
-            next.updateContent(canvas);
+	private static void freeTile(final Tile tile) {
+		tile.invalidateContent();
+		tile.bitmap = null;
+		synchronized (sFreeTileLock) {
+			tile.nextFreeTile = sFreeTileHead;
+			sFreeTileHead = tile;
+		}
+	}
 
-            // It will take some time for a texture to be drawn for the first
-            // time. When scrolling, we need to draw several tiles on the screen
-            // at the same time. It may cause a UI jank even these textures has
-            // been uploaded.
-            if (!hasBeenLoad) next.draw(canvas, 0, 0);
-        }
-        return mUploadIndex == mTiles.length;
-    }
+	// We want to draw the "source" on the "target".
+	// This method is to find the "output" rectangle which is
+	// the corresponding area of the "src".
+	// (x,y) target
+	// (x0,y0) source +---------------+
+	// +----------+ | |
+	// | src | | output |
+	// | +--+ | linear map | +----+ |
+	// | +--+ | ----------> | | | |
+	// | | by (scaleX, scaleY) | +----+ |
+	// +----------+ | |
+	// Texture +---------------+
+	// Canvas
+	private static void mapRect(final RectF output, final RectF src, final float x0, final float y0, final float x,
+			final float y, final float scaleX, final float scaleY) {
+		output.set(x + (src.left - x0) * scaleX, y + (src.top - y0) * scaleY, x + (src.right - x0) * scaleX, y
+				+ (src.bottom - y0) * scaleY);
+	}
 
-    public TiledTexture(Bitmap bitmap) {
-        mWidth = bitmap.getWidth();
-        mHeight = bitmap.getHeight();
-        ArrayList<Tile> list = new ArrayList<Tile>();
+	private static Tile obtainTile() {
+		synchronized (sFreeTileLock) {
+			final Tile result = sFreeTileHead;
+			if (result == null) return new Tile();
+			sFreeTileHead = result.nextFreeTile;
+			result.nextFreeTile = null;
+			return result;
+		}
+	}
 
-        for (int x = 0, w = mWidth; x < w; x += CONTENT_SIZE) {
-            for (int y = 0, h = mHeight; y < h; y += CONTENT_SIZE) {
-                Tile tile = obtainTile();
-                tile.offsetX = x;
-                tile.offsetY = y;
-                tile.bitmap = bitmap;
-                tile.setSize(
-                        Math.min(CONTENT_SIZE, mWidth - x),
-                        Math.min(CONTENT_SIZE, mHeight - y));
-                list.add(tile);
-            }
-        }
-        mTiles = list.toArray(new Tile[list.size()]);
-    }
+	public static class Uploader implements OnGLIdleListener {
+		private final ArrayDeque<TiledTexture> mTextures = new ArrayDeque<TiledTexture>(INIT_CAPACITY);
 
-    public boolean isReady() {
-        return mUploadIndex == mTiles.length;
-    }
+		private final GLRoot mGlRoot;
+		private boolean mIsQueued = false;
 
-    public void recycle() {
-        for (int i = 0, n = mTiles.length; i < n; ++i) {
-            freeTile(mTiles[i]);
-        }
-    }
+		public Uploader(final GLRoot glRoot) {
+			mGlRoot = glRoot;
+		}
 
-    public static void freeResources() {
-        sUploadBitmap = null;
-        sCanvas = null;
-        sBitmapPaint = null;
-        sPaint = null;
-    }
+		public synchronized void addTexture(final TiledTexture t) {
+			if (t.isReady()) return;
+			mTextures.addLast(t);
 
-    public static void prepareResources() {
-        sUploadBitmap = Bitmap.createBitmap(TILE_SIZE, TILE_SIZE, Config.ARGB_8888);
-        sCanvas = new Canvas(sUploadBitmap);
-        sBitmapPaint = new Paint(Paint.FILTER_BITMAP_FLAG);
-        sBitmapPaint.setXfermode(new PorterDuffXfermode(Mode.SRC));
-        sPaint = new Paint();
-        sPaint.setXfermode(new PorterDuffXfermode(Mode.SRC));
-        sPaint.setColor(Color.TRANSPARENT);
-    }
+			if (mIsQueued) return;
+			mIsQueued = true;
+			mGlRoot.addOnGLIdleListener(this);
+		}
 
-    // We want to draw the "source" on the "target".
-    // This method is to find the "output" rectangle which is
-    // the corresponding area of the "src".
-    //                                   (x,y)  target
-    // (x0,y0)  source                     +---------------+
-    //    +----------+                     |               |
-    //    | src      |                     | output        |
-    //    | +--+     |    linear map       | +----+        |
-    //    | +--+     |    ---------->      | |    |        |
-    //    |          | by (scaleX, scaleY) | +----+        |
-    //    +----------+                     |               |
-    //      Texture                        +---------------+
-    //                                          Canvas
-    private static void mapRect(RectF output,
-            RectF src, float x0, float y0, float x, float y, float scaleX,
-            float scaleY) {
-        output.set(x + (src.left - x0) * scaleX,
-                y + (src.top - y0) * scaleY,
-                x + (src.right - x0) * scaleX,
-                y + (src.bottom - y0) * scaleY);
-    }
+		public synchronized void clear() {
+			mTextures.clear();
+		}
 
-    // Draws a mixed color of this texture and a specified color onto the
-    // a rectangle. The used color is: from * (1 - ratio) + to * ratio.
-    public void drawMixed(GLCanvas canvas, int color, float ratio,
-            int x, int y, int width, int height) {
-        RectF src = mSrcRect;
-        RectF dest = mDestRect;
-        float scaleX = (float) width / mWidth ;
-        float scaleY = (float) height / mHeight;
-        for (int i = 0, n = mTiles.length; i < n; ++i) {
-            Tile t = mTiles[i];
-            src.set(0, 0, t.contentWidth, t.contentHeight);
-            src.offset(t.offsetX, t.offsetY);
-            mapRect(dest, src, 0, 0, x, y, scaleX, scaleY);
-            src.offset(BORDER_SIZE - t.offsetX, BORDER_SIZE - t.offsetY);
-            canvas.drawMixed(t, color, ratio, mSrcRect, mDestRect);
-        }
-    }
+		@Override
+		public boolean onGLIdle(final GLCanvas canvas, final boolean renderRequested) {
+			final ArrayDeque<TiledTexture> deque = mTextures;
+			synchronized (this) {
+				long now = SystemClock.uptimeMillis();
+				final long dueTime = now + UPLOAD_TILE_LIMIT;
+				while (now < dueTime && !deque.isEmpty()) {
+					final TiledTexture t = deque.peekFirst();
+					if (t.uploadNextTile(canvas)) {
+						deque.removeFirst();
+						mGlRoot.requestRender();
+					}
+					now = SystemClock.uptimeMillis();
+				}
+				mIsQueued = !mTextures.isEmpty();
 
-    // Draws the texture on to the specified rectangle.
-    @Override
-    public void draw(GLCanvas canvas, int x, int y, int width, int height) {
-        RectF src = mSrcRect;
-        RectF dest = mDestRect;
-        float scaleX = (float) width / mWidth ;
-        float scaleY = (float) height / mHeight;
-        for (int i = 0, n = mTiles.length; i < n; ++i) {
-            Tile t = mTiles[i];
-            src.set(0, 0, t.contentWidth, t.contentHeight);
-            src.offset(t.offsetX, t.offsetY);
-            mapRect(dest, src, 0, 0, x, y, scaleX, scaleY);
-            src.offset(BORDER_SIZE - t.offsetX, BORDER_SIZE - t.offsetY);
-            canvas.drawTexture(t, mSrcRect, mDestRect);
-        }
-    }
+				// return true to keep this listener in the queue
+				return mIsQueued;
+			}
+		}
+	}
 
-    // Draws a sub region of this texture on to the specified rectangle.
-    public void draw(GLCanvas canvas, RectF source, RectF target) {
-        RectF src = mSrcRect;
-        RectF dest = mDestRect;
-        float x0 = source.left;
-        float y0 = source.top;
-        float x = target.left;
-        float y = target.top;
-        float scaleX = target.width() / source.width();
-        float scaleY = target.height() / source.height();
+	private static class Tile extends UploadedTexture {
+		public int offsetX;
+		public int offsetY;
+		public Bitmap bitmap;
+		public Tile nextFreeTile;
+		public int contentWidth;
+		public int contentHeight;
 
-        for (int i = 0, n = mTiles.length; i < n; ++i) {
-            Tile t = mTiles[i];
-            src.set(0, 0, t.contentWidth, t.contentHeight);
-            src.offset(t.offsetX, t.offsetY);
-            if (!src.intersect(source)) continue;
-            mapRect(dest, src, x0, y0, x, y, scaleX, scaleY);
-            src.offset(BORDER_SIZE - t.offsetX, BORDER_SIZE - t.offsetY);
-            canvas.drawTexture(t, src, dest);
-        }
-    }
+		@Override
+		public void setSize(final int width, final int height) {
+			contentWidth = width;
+			contentHeight = height;
+			mWidth = width + 2 * BORDER_SIZE;
+			mHeight = height + 2 * BORDER_SIZE;
+			mTextureWidth = TILE_SIZE;
+			mTextureHeight = TILE_SIZE;
+		}
 
-    @Override
-    public int getWidth() {
-        return mWidth;
-    }
+		@Override
+		protected void onFreeBitmap(final Bitmap bitmap) {
+			// do nothing
+		}
 
-    @Override
-    public int getHeight() {
-        return mHeight;
-    }
+		@Override
+		protected Bitmap onGetBitmap() {
+			final int x = BORDER_SIZE - offsetX;
+			final int y = BORDER_SIZE - offsetY;
+			final int r = bitmap.getWidth() + x;
+			final int b = bitmap.getHeight() + y;
+			sCanvas.drawBitmap(bitmap, x, y, sBitmapPaint);
+			bitmap = null;
 
-    @Override
-    public void draw(GLCanvas canvas, int x, int y) {
-        draw(canvas, x, y, mWidth, mHeight);
-    }
+			// draw borders if need
+			if (x > 0) {
+				sCanvas.drawLine(x - 1, 0, x - 1, TILE_SIZE, sPaint);
+			}
+			if (y > 0) {
+				sCanvas.drawLine(0, y - 1, TILE_SIZE, y - 1, sPaint);
+			}
+			if (r < CONTENT_SIZE) {
+				sCanvas.drawLine(r, 0, r, TILE_SIZE, sPaint);
+			}
+			if (b < CONTENT_SIZE) {
+				sCanvas.drawLine(0, b, TILE_SIZE, b, sPaint);
+			}
 
-    @Override
-    public boolean isOpaque() {
-        return false;
-    }
+			return sUploadBitmap;
+		}
+	}
 }

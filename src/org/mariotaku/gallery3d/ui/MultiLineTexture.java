@@ -27,25 +27,23 @@ import android.text.TextPaint;
 // To create a MultiLineTexture, use the newInstance() method and specify
 // the String, the font size, and the color.
 class MultiLineTexture extends CanvasTexture {
-    private final Layout mLayout;
+	private final Layout mLayout;
 
-    private MultiLineTexture(Layout layout) {
-        super(layout.getWidth(), layout.getHeight());
-        mLayout = layout;
-    }
+	private MultiLineTexture(final Layout layout) {
+		super(layout.getWidth(), layout.getHeight());
+		mLayout = layout;
+	}
 
-    public static MultiLineTexture newInstance(
-            String text, int maxWidth, float textSize, int color,
-            Layout.Alignment alignment) {
-        TextPaint paint = StringTexture.getDefaultPaint(textSize, color);
-        Layout layout = new StaticLayout(text, 0, text.length(), paint,
-                maxWidth, alignment, 1, 0, true, null, 0);
+	@Override
+	protected void onDraw(final Canvas canvas, final Bitmap backing) {
+		mLayout.draw(canvas);
+	}
 
-        return new MultiLineTexture(layout);
-    }
+	public static MultiLineTexture newInstance(final String text, final int maxWidth, final float textSize,
+			final int color, final Layout.Alignment alignment) {
+		final TextPaint paint = StringTexture.getDefaultPaint(textSize, color);
+		final Layout layout = new StaticLayout(text, 0, text.length(), paint, maxWidth, alignment, 1, 0, true, null, 0);
 
-    @Override
-    protected void onDraw(Canvas canvas, Bitmap backing) {
-        mLayout.draw(canvas);
-    }
+		return new MultiLineTexture(layout);
+	}
 }

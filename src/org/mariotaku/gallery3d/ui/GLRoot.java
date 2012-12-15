@@ -16,37 +16,48 @@
 
 package org.mariotaku.gallery3d.ui;
 
+import org.mariotaku.gallery3d.anim.CanvasAnimation;
+
 import android.content.Context;
 import android.graphics.Matrix;
 
-import org.mariotaku.gallery3d.anim.CanvasAnimation;
-
 public interface GLRoot {
 
-    // Listener will be called when GL is idle AND before each frame.
-    // Mainly used for uploading textures.
-    public static interface OnGLIdleListener {
-        public boolean onGLIdle(
-                GLCanvas canvas, boolean renderRequested);
-    }
+	public void addOnGLIdleListener(OnGLIdleListener listener);
 
-    public void addOnGLIdleListener(OnGLIdleListener listener);
-    public void registerLaunchedAnimation(CanvasAnimation animation);
-    public void requestRenderForced();
-    public void requestRender();
-    public void requestLayoutContentPane();
+	public void freeze();
 
-    public void lockRenderThread();
-    public void unlockRenderThread();
+	public int getCompensation();
 
-    public void setContentPane(GLView content);
-    public void setOrientationSource(OrientationSource source);
-    public int getDisplayRotation();
-    public int getCompensation();
-    public Matrix getCompensationMatrix();
-    public void freeze();
-    public void unfreeze();
-    public void setLightsOutMode(boolean enabled);
+	public Matrix getCompensationMatrix();
 
-    public Context getContext();
+	public Context getContext();
+
+	public int getDisplayRotation();
+
+	public void lockRenderThread();
+
+	public void registerLaunchedAnimation(CanvasAnimation animation);
+
+	public void requestLayoutContentPane();
+
+	public void requestRender();
+
+	public void requestRenderForced();
+
+	public void setContentPane(GLView content);
+
+	public void setLightsOutMode(boolean enabled);
+
+	public void setOrientationSource(OrientationSource source);
+
+	public void unfreeze();
+
+	public void unlockRenderThread();
+
+	// Listener will be called when GL is idle AND before each frame.
+	// Mainly used for uploading textures.
+	public static interface OnGLIdleListener {
+		public boolean onGLIdle(GLCanvas canvas, boolean renderRequested);
+	}
 }

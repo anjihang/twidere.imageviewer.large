@@ -17,5 +17,5 @@
 package org.mariotaku.gallery3d.data;
 
 public interface ContentListener {
-    public void onContentDirty();
+	public void onContentDirty();
 }

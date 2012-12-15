@@ -16,6 +16,16 @@
 
 package org.mariotaku.gallery3d.app;
 
+import org.mariotaku.gallery3d.R;
+import org.mariotaku.gallery3d.common.ApiHelper;
+import org.mariotaku.gallery3d.data.BitmapPool;
+import org.mariotaku.gallery3d.data.DataManager;
+import org.mariotaku.gallery3d.data.MediaItem;
+import org.mariotaku.gallery3d.ui.GLRoot;
+import org.mariotaku.gallery3d.ui.GLRootView;
+import org.mariotaku.gallery3d.util.LightCycleHelper.PanoramaViewHelper;
+import org.mariotaku.gallery3d.util.ThreadPool;
+
 import android.annotation.TargetApi;
 import android.app.Activity;
 import android.app.AlertDialog;
@@ -33,278 +43,267 @@ import android.view.MenuItem;
 import android.view.Window;
 import android.view.WindowManager;
 
-import org.mariotaku.gallery3d.R;
-import org.mariotaku.gallery3d.common.ApiHelper;
-import org.mariotaku.gallery3d.data.BitmapPool;
-import org.mariotaku.gallery3d.data.DataManager;
-import org.mariotaku.gallery3d.data.MediaItem;
-import org.mariotaku.gallery3d.ui.GLRoot;
-import org.mariotaku.gallery3d.ui.GLRootView;
-import org.mariotaku.gallery3d.util.ThreadPool;
-import org.mariotaku.gallery3d.util.LightCycleHelper.PanoramaViewHelper;
-
 public class AbstractGalleryActivity extends Activity implements GalleryContext {
-    @SuppressWarnings("unused")
-    private static final String TAG = "AbstractGalleryActivity";
-    private GLRootView mGLRootView;
-    private StateManager mStateManager;
-    private GalleryActionBar mActionBar;
-    private OrientationManager mOrientationManager;
-    private TransitionStore mTransitionStore = new TransitionStore();
-    private boolean mDisableToggleStatusBar;
-    private PanoramaViewHelper mPanoramaViewHelper;
+	@SuppressWarnings("unused")
+	private static final String TAG = "AbstractGalleryActivity";
+	private GLRootView mGLRootView;
+	private StateManager mStateManager;
+	private GalleryActionBar mActionBar;
+	private OrientationManager mOrientationManager;
+	private final TransitionStore mTransitionStore = new TransitionStore();
+	private boolean mDisableToggleStatusBar;
+	private PanoramaViewHelper mPanoramaViewHelper;
 
-    private AlertDialog mAlertDialog = null;
-    private BroadcastReceiver mMountReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            if (getExternalCacheDir() != null) onStorageReady();
-        }
-    };
-    private IntentFilter mMountFilter = new IntentFilter(Intent.ACTION_MEDIA_MOUNTED);
+	private AlertDialog mAlertDialog = null;
+	private final BroadcastReceiver mMountReceiver = new BroadcastReceiver() {
+		@Override
+		public void onReceive(final Context context, final Intent intent) {
+			if (getExternalCacheDir() != null) {
+				onStorageReady();
+			}
+		}
+	};
+	private final IntentFilter mMountFilter = new IntentFilter(Intent.ACTION_MEDIA_MOUNTED);
 
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        mOrientationManager = new OrientationManager(this);
-        toggleStatusBarByOrientation();
-        getWindow().setBackgroundDrawable(null);
-        mPanoramaViewHelper = new PanoramaViewHelper(this);
-        mPanoramaViewHelper.onCreate();
-    }
+	@Override
+	public Context getAndroidContext() {
+		return this;
+	}
 
-    @Override
-    protected void onSaveInstanceState(Bundle outState) {
-        mGLRootView.lockRenderThread();
-        try {
-            super.onSaveInstanceState(outState);
-            getStateManager().saveState(outState);
-        } finally {
-            mGLRootView.unlockRenderThread();
-        }
-    }
+	@Override
+	public DataManager getDataManager() {
+		return ((GalleryApp) getApplication()).getDataManager();
+	}
 
-    @Override
-    public void onConfigurationChanged(Configuration config) {
-        super.onConfigurationChanged(config);
-        mStateManager.onConfigurationChange(config);
-        invalidateOptionsMenu();
-        toggleStatusBarByOrientation();
-    }
+	public GalleryActionBar getGalleryActionBar() {
+		if (mActionBar == null) {
+			mActionBar = new GalleryActionBar(this);
+		}
+		return mActionBar;
+	}
 
-    @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
-        super.onCreateOptionsMenu(menu);
-        return getStateManager().createOptionsMenu(menu);
-    }
+	public GLRoot getGLRoot() {
+		return mGLRootView;
+	}
 
-    @Override
-    public Context getAndroidContext() {
-        return this;
-    }
+	public OrientationManager getOrientationManager() {
+		return mOrientationManager;
+	}
 
-    @Override
-    public DataManager getDataManager() {
-        return ((GalleryApp) getApplication()).getDataManager();
-    }
+	public PanoramaViewHelper getPanoramaViewHelper() {
+		return mPanoramaViewHelper;
+	}
 
-    @Override
-    public ThreadPool getThreadPool() {
-        return ((GalleryApp) getApplication()).getThreadPool();
-    }
+	public synchronized StateManager getStateManager() {
+		if (mStateManager == null) {
+			mStateManager = new StateManager(this);
+		}
+		return mStateManager;
+	}
 
-    public synchronized StateManager getStateManager() {
-        if (mStateManager == null) {
-            mStateManager = new StateManager(this);
-        }
-        return mStateManager;
-    }
+	@Override
+	public ThreadPool getThreadPool() {
+		return ((GalleryApp) getApplication()).getThreadPool();
+	}
 
-    public GLRoot getGLRoot() {
-        return mGLRootView;
-    }
+	public TransitionStore getTransitionStore() {
+		return mTransitionStore;
+	}
 
-    public OrientationManager getOrientationManager() {
-        return mOrientationManager;
-    }
+	@Override
+	public void onBackPressed() {
+		// send the back event to the top sub-state
+		final GLRoot root = getGLRoot();
+		root.lockRenderThread();
+		try {
+			getStateManager().onBackPressed();
+		} finally {
+			root.unlockRenderThread();
+		}
+	}
 
-    @Override
-    public void setContentView(int resId) {
-        super.setContentView(resId);
-        mGLRootView = (GLRootView) findViewById(R.id.gl_root_view);
-    }
+	@Override
+	public void onConfigurationChanged(final Configuration config) {
+		super.onConfigurationChanged(config);
+		mStateManager.onConfigurationChange(config);
+		invalidateOptionsMenu();
+		toggleStatusBarByOrientation();
+	}
 
-    protected void onStorageReady() {
-        if (mAlertDialog != null) {
-            mAlertDialog.dismiss();
-            mAlertDialog = null;
-            unregisterReceiver(mMountReceiver);
-        }
-    }
+	@Override
+	public boolean onCreateOptionsMenu(final Menu menu) {
+		super.onCreateOptionsMenu(menu);
+		return getStateManager().createOptionsMenu(menu);
+	}
 
-    @Override
-    protected void onStart() {
-        super.onStart();
-        if (getExternalCacheDir() == null) {
-            OnCancelListener onCancel = new OnCancelListener() {
-                @Override
-                public void onCancel(DialogInterface dialog) {
-                    finish();
-                }
-            };
-            OnClickListener onClick = new OnClickListener() {
-                @Override
-                public void onClick(DialogInterface dialog, int which) {
-                    dialog.cancel();
-                }
-            };
-            AlertDialog.Builder builder = new AlertDialog.Builder(this)
-                    .setTitle(R.string.no_external_storage_title)
-                    .setMessage(R.string.no_external_storage)
-                    .setNegativeButton(android.R.string.cancel, onClick)
-                    .setOnCancelListener(onCancel);
-            if (ApiHelper.HAS_SET_ICON_ATTRIBUTE) {
-                setAlertDialogIconAttribute(builder);
-            } else {
-                builder.setIcon(android.R.drawable.ic_dialog_alert);
-            }
-            mAlertDialog = builder.show();
-            registerReceiver(mMountReceiver, mMountFilter);
-        }
-        mPanoramaViewHelper.onStart();
-    }
+	@Override
+	public boolean onOptionsItemSelected(final MenuItem item) {
+		final GLRoot root = getGLRoot();
+		root.lockRenderThread();
+		try {
+			return getStateManager().itemSelected(item);
+		} finally {
+			root.unlockRenderThread();
+		}
+	}
 
-    @TargetApi(ApiHelper.VERSION_CODES.HONEYCOMB)
-    private static void setAlertDialogIconAttribute(
-            AlertDialog.Builder builder) {
-        builder.setIconAttribute(android.R.attr.alertDialogIcon);
-    }
+	@Override
+	public void setContentView(final int resId) {
+		super.setContentView(resId);
+		mGLRootView = (GLRootView) findViewById(R.id.gl_root_view);
+	}
 
-    @Override
-    protected void onStop() {
-        super.onStop();
-        if (mAlertDialog != null) {
-            unregisterReceiver(mMountReceiver);
-            mAlertDialog.dismiss();
-            mAlertDialog = null;
-        }
-        mPanoramaViewHelper.onStop();
-    }
+	protected void disableToggleStatusBar() {
+		mDisableToggleStatusBar = true;
+	}
 
-    @Override
-    protected void onResume() {
-        super.onResume();
-        mGLRootView.lockRenderThread();
-        try {
-            getStateManager().resume();
-            getDataManager().resume();
-        } finally {
-            mGLRootView.unlockRenderThread();
-        }
-        mGLRootView.onResume();
-        mOrientationManager.resume();
-    }
+	protected boolean isFullscreen() {
+		return (getWindow().getAttributes().flags & WindowManager.LayoutParams.FLAG_FULLSCREEN) != 0;
+	}
 
-    @Override
-    protected void onPause() {
-        super.onPause();
-        mOrientationManager.pause();
-        mGLRootView.onPause();
-        mGLRootView.lockRenderThread();
-        try {
-            getStateManager().pause();
-            getDataManager().pause();
-        } finally {
-            mGLRootView.unlockRenderThread();
-        }
-        clearBitmapPool(MediaItem.getMicroThumbPool());
-        clearBitmapPool(MediaItem.getThumbPool());
+	@Override
+	protected void onActivityResult(final int requestCode, final int resultCode, final Intent data) {
+		mGLRootView.lockRenderThread();
+		try {
+			getStateManager().notifyActivityResult(requestCode, resultCode, data);
+		} finally {
+			mGLRootView.unlockRenderThread();
+		}
+	}
 
-        MediaItem.getBytesBufferPool().clear();
-    }
+	@Override
+	protected void onCreate(final Bundle savedInstanceState) {
+		super.onCreate(savedInstanceState);
+		mOrientationManager = new OrientationManager(this);
+		toggleStatusBarByOrientation();
+		getWindow().setBackgroundDrawable(null);
+		mPanoramaViewHelper = new PanoramaViewHelper(this);
+		mPanoramaViewHelper.onCreate();
+	}
 
-    private static void clearBitmapPool(BitmapPool pool) {
-        if (pool != null) pool.clear();
-    }
+	@Override
+	protected void onDestroy() {
+		super.onDestroy();
+		mGLRootView.lockRenderThread();
+		try {
+			getStateManager().destroy();
+		} finally {
+			mGLRootView.unlockRenderThread();
+		}
+	}
 
-    @Override
-    protected void onDestroy() {
-        super.onDestroy();
-        mGLRootView.lockRenderThread();
-        try {
-            getStateManager().destroy();
-        } finally {
-            mGLRootView.unlockRenderThread();
-        }
-    }
+	@Override
+	protected void onPause() {
+		super.onPause();
+		mOrientationManager.pause();
+		mGLRootView.onPause();
+		mGLRootView.lockRenderThread();
+		try {
+			getStateManager().pause();
+			getDataManager().pause();
+		} finally {
+			mGLRootView.unlockRenderThread();
+		}
+		clearBitmapPool(MediaItem.getMicroThumbPool());
+		clearBitmapPool(MediaItem.getThumbPool());
 
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        mGLRootView.lockRenderThread();
-        try {
-            getStateManager().notifyActivityResult(
-                    requestCode, resultCode, data);
-        } finally {
-            mGLRootView.unlockRenderThread();
-        }
-    }
+		MediaItem.getBytesBufferPool().clear();
+	}
 
-    @Override
-    public void onBackPressed() {
-        // send the back event to the top sub-state
-        GLRoot root = getGLRoot();
-        root.lockRenderThread();
-        try {
-            getStateManager().onBackPressed();
-        } finally {
-            root.unlockRenderThread();
-        }
-    }
+	@Override
+	protected void onResume() {
+		super.onResume();
+		mGLRootView.lockRenderThread();
+		try {
+			getStateManager().resume();
+			getDataManager().resume();
+		} finally {
+			mGLRootView.unlockRenderThread();
+		}
+		mGLRootView.onResume();
+		mOrientationManager.resume();
+	}
 
-    public GalleryActionBar getGalleryActionBar() {
-        if (mActionBar == null) {
-            mActionBar = new GalleryActionBar(this);
-        }
-        return mActionBar;
-    }
+	@Override
+	protected void onSaveInstanceState(final Bundle outState) {
+		mGLRootView.lockRenderThread();
+		try {
+			super.onSaveInstanceState(outState);
+			getStateManager().saveState(outState);
+		} finally {
+			mGLRootView.unlockRenderThread();
+		}
+	}
 
-    @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        GLRoot root = getGLRoot();
-        root.lockRenderThread();
-        try {
-            return getStateManager().itemSelected(item);
-        } finally {
-            root.unlockRenderThread();
-        }
-    }
+	@Override
+	protected void onStart() {
+		super.onStart();
+		if (getExternalCacheDir() == null) {
+			final OnCancelListener onCancel = new OnCancelListener() {
+				@Override
+				public void onCancel(final DialogInterface dialog) {
+					finish();
+				}
+			};
+			final OnClickListener onClick = new OnClickListener() {
+				@Override
+				public void onClick(final DialogInterface dialog, final int which) {
+					dialog.cancel();
+				}
+			};
+			final AlertDialog.Builder builder = new AlertDialog.Builder(this)
+					.setTitle(R.string.no_external_storage_title).setMessage(R.string.no_external_storage)
+					.setNegativeButton(android.R.string.cancel, onClick).setOnCancelListener(onCancel);
+			if (ApiHelper.HAS_SET_ICON_ATTRIBUTE) {
+				setAlertDialogIconAttribute(builder);
+			} else {
+				builder.setIcon(android.R.drawable.ic_dialog_alert);
+			}
+			mAlertDialog = builder.show();
+			registerReceiver(mMountReceiver, mMountFilter);
+		}
+		mPanoramaViewHelper.onStart();
+	}
 
-    protected void disableToggleStatusBar() {
-        mDisableToggleStatusBar = true;
-    }
+	@Override
+	protected void onStop() {
+		super.onStop();
+		if (mAlertDialog != null) {
+			unregisterReceiver(mMountReceiver);
+			mAlertDialog.dismiss();
+			mAlertDialog = null;
+		}
+		mPanoramaViewHelper.onStop();
+	}
 
-    // Shows status bar in portrait view, hide in landscape view
-    private void toggleStatusBarByOrientation() {
-        if (mDisableToggleStatusBar) return;
+	protected void onStorageReady() {
+		if (mAlertDialog != null) {
+			mAlertDialog.dismiss();
+			mAlertDialog = null;
+			unregisterReceiver(mMountReceiver);
+		}
+	}
 
-        Window win = getWindow();
-        if (getResources().getConfiguration().orientation == Configuration.ORIENTATION_PORTRAIT) {
-            win.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
-        } else {
-            win.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
-        }
-    }
+	// Shows status bar in portrait view, hide in landscape view
+	private void toggleStatusBarByOrientation() {
+		if (mDisableToggleStatusBar) return;
 
-    public TransitionStore getTransitionStore() {
-        return mTransitionStore;
-    }
+		final Window win = getWindow();
+		if (getResources().getConfiguration().orientation == Configuration.ORIENTATION_PORTRAIT) {
+			win.clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+		} else {
+			win.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+		}
+	}
 
-    public PanoramaViewHelper getPanoramaViewHelper() {
-        return mPanoramaViewHelper;
-    }
+	private static void clearBitmapPool(final BitmapPool pool) {
+		if (pool != null) {
+			pool.clear();
+		}
+	}
 
-    protected boolean isFullscreen() {
-        return (getWindow().getAttributes().flags
-                & WindowManager.LayoutParams.FLAG_FULLSCREEN) != 0;
-    }
+	@TargetApi(ApiHelper.VERSION_CODES.HONEYCOMB)
+	private static void setAlertDialogIconAttribute(final AlertDialog.Builder builder) {
+		builder.setIconAttribute(android.R.attr.alertDialogIcon);
+	}
 }

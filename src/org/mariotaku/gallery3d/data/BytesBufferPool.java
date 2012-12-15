@@ -16,76 +16,77 @@
 
 package org.mariotaku.gallery3d.data;
 
-import org.mariotaku.gallery3d.util.ThreadPool.JobContext;
-
 import java.io.FileDescriptor;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 
+import org.mariotaku.gallery3d.util.ThreadPool.JobContext;
+
 public class BytesBufferPool {
 
-    private static final int READ_STEP = 4096;
+	private static final int READ_STEP = 4096;
 
-    public static class BytesBuffer {
-        public byte[] data;
-        public int offset;
-        public int length;
+	private final int mPoolSize;
 
-        private BytesBuffer(int capacity) {
-            this.data = new byte[capacity];
-        }
+	private final int mBufferSize;
+	private final ArrayList<BytesBuffer> mList;
 
-        // an helper function to read content from FileDescriptor
-        public void readFrom(JobContext jc, FileDescriptor fd) throws IOException {
-            FileInputStream fis = new FileInputStream(fd);
-            length = 0;
-            try {
-                int capacity = data.length;
-                while (true) {
-                    int step = Math.min(READ_STEP, capacity - length);
-                    int rc = fis.read(data, length, step);
-                    if (rc < 0 || jc.isCancelled()) return;
-                    length += rc;
+	public BytesBufferPool(final int poolSize, final int bufferSize) {
+		mList = new ArrayList<BytesBuffer>(poolSize);
+		mPoolSize = poolSize;
+		mBufferSize = bufferSize;
+	}
 
-                    if (length == capacity) {
-                        byte[] newData = new byte[data.length * 2];
-                        System.arraycopy(data, 0, newData, 0, data.length);
-                        data = newData;
-                        capacity = data.length;
-                    }
-                }
-            } finally {
-                fis.close();
-            }
-        }
-    }
+	public synchronized void clear() {
+		mList.clear();
+	}
 
-    private final int mPoolSize;
-    private final int mBufferSize;
-    private final ArrayList<BytesBuffer> mList;
+	public synchronized BytesBuffer get() {
+		final int n = mList.size();
+		return n > 0 ? mList.remove(n - 1) : new BytesBuffer(mBufferSize);
+	}
 
-    public BytesBufferPool(int poolSize, int bufferSize) {
-        mList = new ArrayList<BytesBuffer>(poolSize);
-        mPoolSize = poolSize;
-        mBufferSize = bufferSize;
-    }
+	public synchronized void recycle(final BytesBuffer buffer) {
+		if (buffer.data.length != mBufferSize) return;
+		if (mList.size() < mPoolSize) {
+			buffer.offset = 0;
+			buffer.length = 0;
+			mList.add(buffer);
+		}
+	}
 
-    public synchronized BytesBuffer get() {
-        int n = mList.size();
-        return n > 0 ? mList.remove(n - 1) : new BytesBuffer(mBufferSize);
-    }
+	public static class BytesBuffer {
+		public byte[] data;
+		public int offset;
+		public int length;
 
-    public synchronized void recycle(BytesBuffer buffer) {
-        if (buffer.data.length != mBufferSize) return;
-        if (mList.size() < mPoolSize) {
-            buffer.offset = 0;
-            buffer.length = 0;
-            mList.add(buffer);
-        }
-    }
+		private BytesBuffer(final int capacity) {
+			data = new byte[capacity];
+		}
 
-    public synchronized void clear() {
-        mList.clear();
-    }
+		// an helper function to read content from FileDescriptor
+		public void readFrom(final JobContext jc, final FileDescriptor fd) throws IOException {
+			final FileInputStream fis = new FileInputStream(fd);
+			length = 0;
+			try {
+				int capacity = data.length;
+				while (true) {
+					final int step = Math.min(READ_STEP, capacity - length);
+					final int rc = fis.read(data, length, step);
+					if (rc < 0 || jc.isCancelled()) return;
+					length += rc;
+
+					if (length == capacity) {
+						final byte[] newData = new byte[data.length * 2];
+						System.arraycopy(data, 0, newData, 0, data.length);
+						data = newData;
+						capacity = data.length;
+					}
+				}
+			} finally {
+				fis.close();
+			}
+		}
+	}
 }
