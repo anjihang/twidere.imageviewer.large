@@ -28,7 +28,6 @@ import org.mariotaku.gallery3d.ui.SynchronizedHandler;
 import android.annotation.TargetApi;
 import android.app.Activity;
 import android.content.Intent;
-import android.graphics.Rect;
 import android.net.Uri;
 import android.nfc.NfcAdapter;
 import android.nfc.NfcAdapter.CreateBeamUrisCallback;
@@ -41,8 +40,7 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.widget.RelativeLayout;
 
-public class PhotoPage extends ActivityState implements PhotoView.Listener, OrientationManager.Listener,
-		AppBridge.Server {
+public class PhotoPage extends ActivityState implements PhotoView.Listener, OrientationManager.Listener {
 
 	private static final int MSG_HIDE_BARS = 1;
 	private static final int MSG_ON_FULL_SCREEN_CHANGED = 4;
@@ -79,13 +77,11 @@ public class PhotoPage extends ActivityState implements PhotoView.Listener, Orie
 	private boolean mShowBars = true;
 	private volatile boolean mActionBarAllowed = true;
 	private boolean mIsMenuVisible;
-	private PhotoPageProgressBar mProgressBar;
 	private MediaItem mCurrentPhoto = null;
 	private boolean mIsActive;
 	private String mSetPathString;
 	// This is the original mSetPathString before adding the camera preview
 	// item.
-	private AppBridge mAppBridge;
 	private OrientationManager mOrientationManager;
 	private boolean mTreatBackAsUp;
 	private boolean mStartInFilmstrip;
@@ -140,7 +136,6 @@ public class PhotoPage extends ActivityState implements PhotoView.Listener, Orie
 						break;
 					}
 					case MSG_ON_FULL_SCREEN_CHANGED: {
-						mAppBridge.onFullScreenChanged(message.arg1 == 1);
 						break;
 					}
 					case MSG_UPDATE_ACTION_BAR: {
@@ -169,7 +164,7 @@ public class PhotoPage extends ActivityState implements PhotoView.Listener, Orie
 						stayedOnCamera = true;
 
 						if (stayedOnCamera) {
-							if (mAppBridge == null) {
+							if (null == null) {
 								/*
 								 * We got here by swiping from photo 1 to the
 								 * placeholder, so make it be the thing that is
@@ -223,11 +218,9 @@ public class PhotoPage extends ActivityState implements PhotoView.Listener, Orie
 		mStartInFilmstrip = data.getBoolean(KEY_START_IN_FILMSTRIP, false);
 		mCurrentIndex = data.getInt(KEY_INDEX_HINT, 0);
 		if (mSetPathString != null) {
-			mAppBridge = (AppBridge) data.getParcelable(KEY_APP_BRIDGE);
-			if (mAppBridge != null) {
+			if (null != null) {
 				mShowBars = false;
 				mHasCameraScreennailOrPlaceholder = true;
-				mAppBridge.setServer(this);
 
 				if (data.getBoolean(KEY_SHOW_WHEN_LOCKED, false)) {
 					// Set the flag to be on top of the lock screen.
@@ -246,7 +239,7 @@ public class PhotoPage extends ActivityState implements PhotoView.Listener, Orie
 									// album
 				return;
 			final PhotoDataAdapter pda = new PhotoDataAdapter(mActivity, mPhotoView, itemPath, mCurrentIndex,
-					mAppBridge == null ? -1 : 0);
+					null == null ? -1 : 0);
 			mModel = pda;
 			mPhotoView.setModel(mModel);
 
@@ -324,7 +317,7 @@ public class PhotoPage extends ActivityState implements PhotoView.Listener, Orie
 
 	@Override
 	public void onPictureCenter(boolean isCamera) {
-		isCamera = isCamera || mHasCameraScreennailOrPlaceholder && mAppBridge == null;
+		isCamera = isCamera || mHasCameraScreennailOrPlaceholder && null == null;
 		mPhotoView.setWantPictureCenterCallbacks(false);
 		mHandler.removeMessages(MSG_ON_CAMERA_CENTER);
 		mHandler.removeMessages(MSG_ON_PICTURE_CENTER);
@@ -336,9 +329,6 @@ public class PhotoPage extends ActivityState implements PhotoView.Listener, Orie
 	// //////////////////////////////////////////////////////////////////////////
 	@Override
 	public void onSingleTapUp(final int x, final int y) {
-		if (mAppBridge != null) {
-			if (mAppBridge.onSingleTapUp(x, y)) return;
-		}
 
 		final MediaItem item = mModel.getMediaItem(0);
 		if (item == null) // item is not ready or it is camera preview, ignore
@@ -360,25 +350,6 @@ public class PhotoPage extends ActivityState implements PhotoView.Listener, Orie
 	}
 
 	@Override
-	public void setCameraRelativeFrame(final Rect frame) {
-		mPhotoView.setCameraRelativeFrame(frame);
-	}
-
-	// ////////////////////////////////////////////////////////////////////////
-	// Action Bar show/hide management
-	// ////////////////////////////////////////////////////////////////////////
-
-	@Override
-	public void setSwipingEnabled(final boolean enabled) {
-		mPhotoView.setSwipingEnabled(enabled);
-	}
-
-	@Override
-	public boolean switchWithCaptureAnimation(final int offset) {
-		return mPhotoView.switchWithCaptureAnimation(offset);
-	}
-
-	@Override
 	protected int getBackgroundColorId() {
 		return R.color.photo_background;
 	}
@@ -387,7 +358,7 @@ public class PhotoPage extends ActivityState implements PhotoView.Listener, Orie
 	protected void onBackPressed() {
 		if (mShowDetails) {
 			hideDetails();
-		} else if (mAppBridge == null || !switchWithCaptureAnimation(-1)) {
+		} else {
 			// We are leaving this page. Set the result now.
 			setResult();
 			if (mStartInFilmstrip) {
@@ -407,11 +378,6 @@ public class PhotoPage extends ActivityState implements PhotoView.Listener, Orie
 
 	@Override
 	protected void onDestroy() {
-		if (mAppBridge != null) {
-			mAppBridge.setServer(null);
-			mAppBridge.detachScreenNail();
-			mAppBridge = null;
-		}
 		mOrientationManager.removeListener(this);
 		mActivity.getGLRoot().setOrientationSource(null);
 
@@ -458,7 +424,7 @@ public class PhotoPage extends ActivityState implements PhotoView.Listener, Orie
 
 	private boolean canShowBars() {
 		// No bars if we are showing camera preview.
-		if (mAppBridge != null && mCurrentIndex == 0) return false;
+		if (null != null && mCurrentIndex == 0) return false;
 
 		// No bars if it's not allowed.
 		if (!mActionBarAllowed) return false;
@@ -482,7 +448,7 @@ public class PhotoPage extends ActivityState implements PhotoView.Listener, Orie
 	}
 
 	private void onUpPressed() {
-		if (mStartInFilmstrip || mAppBridge != null) return;
+		if (mStartInFilmstrip || null != null) return;
 
 		if (mActivity.getStateManager().getStateCount() > 1) {
 			setResult();
@@ -560,9 +526,6 @@ public class PhotoPage extends ActivityState implements PhotoView.Listener, Orie
 	}
 
 	private void updateProgressBar() {
-		if (mProgressBar != null) {
-			mProgressBar.hideProgress();
-		}
 	}
 
 	private void updateUIForCurrentPhoto() {

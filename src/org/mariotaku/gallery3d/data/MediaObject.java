@@ -107,11 +107,6 @@ public abstract class MediaObject {
 		return mDataVersion;
 	}
 
-	public MediaDetails getDetails() {
-		final MediaDetails details = new MediaDetails();
-		return details;
-	}
-
 	public int getMediaType() {
 		return MEDIA_TYPE_UNKNOWN;
 	}

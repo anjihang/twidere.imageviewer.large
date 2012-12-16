@@ -31,7 +31,6 @@ import org.mariotaku.gallery3d.common.ApiHelper;
 import org.mariotaku.gallery3d.common.Utils;
 import org.mariotaku.gallery3d.util.GalleryUtils;
 import org.mariotaku.gallery3d.util.MotionEventHelper;
-import org.mariotaku.gallery3d.util.Profile;
 
 import android.annotation.TargetApi;
 import android.content.Context;
@@ -67,8 +66,7 @@ public class GLRootView extends GLSurfaceView implements GLSurfaceView.Renderer,
 
 	private static final boolean DEBUG_DRAWING_STAT = false;
 
-	private static final boolean DEBUG_PROFILE = false;
-	private static final boolean DEBUG_PROFILE_SLOW_ONLY = false;
+	private static final boolean false_SLOW_ONLY = false;
 
 	private static final int FLAG_INITIALIZED = 1;
 	private static final int FLAG_NEED_LAYOUT = 2;
@@ -198,8 +196,7 @@ public class GLRootView extends GLSurfaceView implements GLSurfaceView.Renderer,
 	public void onDrawFrame(final GL10 gl) {
 		AnimationTime.update();
 		long t0;
-		if (DEBUG_PROFILE_SLOW_ONLY) {
-			Profile.hold();
+		if (false_SLOW_ONLY) {
 			t0 = System.nanoTime();
 		}
 		mRenderLock.lock();
@@ -229,7 +226,7 @@ public class GLRootView extends GLSurfaceView implements GLSurfaceView.Renderer,
 			});
 		}
 
-		if (DEBUG_PROFILE_SLOW_ONLY) {
+		if (false_SLOW_ONLY) {
 			final long t = System.nanoTime();
 			final long durationInMs = (t - mLastDrawFinishTime) / 1000000;
 			final long durationDrawInMs = (t - t0) / 1000000;
@@ -237,9 +234,6 @@ public class GLRootView extends GLSurfaceView implements GLSurfaceView.Renderer,
 
 			if (durationInMs > 34) { // 34ms -> we skipped at least 2 frames
 				Log.v(TAG, "----- SLOW (" + durationDrawInMs + "/" + durationInMs + ") -----");
-				Profile.commit();
-			} else {
-				Profile.drop();
 			}
 		}
 	}
@@ -248,12 +242,6 @@ public class GLRootView extends GLSurfaceView implements GLSurfaceView.Renderer,
 	public void onPause() {
 		unfreeze();
 		super.onPause();
-		if (DEBUG_PROFILE) {
-			Log.d(TAG, "Stop profiling");
-			Profile.disableAll();
-			Profile.dumpToFile("/sdcard/gallery.prof");
-			Profile.reset();
-		}
 	}
 
 	/**
@@ -266,10 +254,6 @@ public class GLRootView extends GLSurfaceView implements GLSurfaceView.Renderer,
 		Log.i(TAG, "onSurfaceChanged: " + width + "x" + height + ", gl10: " + gl1.toString());
 		Process.setThreadPriority(Process.THREAD_PRIORITY_DISPLAY);
 		GalleryUtils.setRenderThread();
-		if (DEBUG_PROFILE) {
-			Log.d(TAG, "Start profiling");
-			Profile.enable(20); // take a sample every 20ms
-		}
 		final GL11 gl = (GL11) gl1;
 		Utils.assertTrue(mGL == gl);
 
@@ -296,7 +280,7 @@ public class GLRootView extends GLSurfaceView implements GLSurfaceView.Renderer,
 			mRenderLock.unlock();
 		}
 
-		if (DEBUG_FPS || DEBUG_PROFILE) {
+		if (DEBUG_FPS) {
 			setRenderMode(GLSurfaceView.RENDERMODE_CONTINUOUSLY);
 		} else {
 			setRenderMode(GLSurfaceView.RENDERMODE_WHEN_DIRTY);

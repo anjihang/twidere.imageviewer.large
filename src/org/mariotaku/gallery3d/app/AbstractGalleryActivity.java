@@ -23,7 +23,6 @@ import org.mariotaku.gallery3d.data.DataManager;
 import org.mariotaku.gallery3d.data.MediaItem;
 import org.mariotaku.gallery3d.ui.GLRoot;
 import org.mariotaku.gallery3d.ui.GLRootView;
-import org.mariotaku.gallery3d.util.LightCycleHelper.PanoramaViewHelper;
 import org.mariotaku.gallery3d.util.ThreadPool;
 
 import android.annotation.TargetApi;
@@ -52,7 +51,6 @@ public class AbstractGalleryActivity extends Activity implements GalleryContext 
 	private OrientationManager mOrientationManager;
 	private final TransitionStore mTransitionStore = new TransitionStore();
 	private boolean mDisableToggleStatusBar;
-	private PanoramaViewHelper mPanoramaViewHelper;
 
 	private AlertDialog mAlertDialog = null;
 	private final BroadcastReceiver mMountReceiver = new BroadcastReceiver() {
@@ -88,10 +86,6 @@ public class AbstractGalleryActivity extends Activity implements GalleryContext 
 
 	public OrientationManager getOrientationManager() {
 		return mOrientationManager;
-	}
-
-	public PanoramaViewHelper getPanoramaViewHelper() {
-		return mPanoramaViewHelper;
 	}
 
 	public synchronized StateManager getStateManager() {
@@ -177,8 +171,6 @@ public class AbstractGalleryActivity extends Activity implements GalleryContext 
 		mOrientationManager = new OrientationManager(this);
 		toggleStatusBarByOrientation();
 		getWindow().setBackgroundDrawable(null);
-		mPanoramaViewHelper = new PanoramaViewHelper(this);
-		mPanoramaViewHelper.onCreate();
 	}
 
 	@Override
@@ -262,7 +254,6 @@ public class AbstractGalleryActivity extends Activity implements GalleryContext 
 			mAlertDialog = builder.show();
 			registerReceiver(mMountReceiver, mMountFilter);
 		}
-		mPanoramaViewHelper.onStart();
 	}
 
 	@Override
@@ -273,7 +264,6 @@ public class AbstractGalleryActivity extends Activity implements GalleryContext 
 			mAlertDialog.dismiss();
 			mAlertDialog = null;
 		}
-		mPanoramaViewHelper.onStop();
 	}
 
 	protected void onStorageReady() {

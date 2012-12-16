@@ -156,7 +156,10 @@ public class NinePatchTexture extends ResourceTexture {
 		// a less used item, otherwise returns null.
 		public NinePatchInstance put(final int key, final NinePatchInstance value) {
 			if (mCount == CACHE_SIZE) {
-				final NinePatchInstance old = mValue[CACHE_SIZE - 1]; // remove the last item
+				final NinePatchInstance old = mValue[CACHE_SIZE - 1]; // remove
+																		// the
+																		// last
+																		// item
 				mKey[CACHE_SIZE - 1] = key;
 				mValue[CACHE_SIZE - 1] = value;
 				return old;

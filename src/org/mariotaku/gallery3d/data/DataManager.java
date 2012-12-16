@@ -157,7 +157,6 @@ public class DataManager {
 		}
 	}
 
-
 	public void pause() {
 		if (--mActiveCount == 0) {
 			for (final MediaSource source : mSourceMap.values()) {
